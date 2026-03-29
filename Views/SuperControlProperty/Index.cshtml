@@ -1,0 +1,292 @@
+@model petergraves.ViewModels.SuperControlProperty.SuperControlPropertyResponseViewModel
+@{
+    ViewData["Title"] = "Property Details";
+}
+
+<section class="sv-wrap">
+    <div class="ambient-orb orb-a"></div>
+    <div class="ambient-orb orb-b"></div>
+
+    <div class="sv-shell sv-detail-shell svp-shell">
+
+        @if (!string.IsNullOrWhiteSpace(Model.Error))
+        {
+            <article class="sv-alert">
+                <strong>Unable to load property:</strong> @Model.Error
+            </article>
+        }
+        else if (Model.Property is not null)
+        {
+            <header class="sv-hero svp-hero">
+                <p class="kicker">Property Detail</p>
+                <nav class="sv-breadcrumb" aria-label="Breadcrumb">
+                    <ol>
+                        <li><a asp-controller="Site" asp-action="Index">Home</a></li>
+                        <li><a asp-controller="SuperControlDemo" asp-action="Index">SuperControl API Demo</a></li>
+                        <li>
+                            <a asp-controller="SuperControlListingSiteDemo"
+                               asp-action="Index"
+                               asp-route-where="@Model.Request.Where"
+                                         asp-route-checkIn="@(Model.Request.CheckIn?.ToString("yyyy-MM-dd"))"
+                                         asp-route-checkOut="@(Model.Request.CheckOut?.ToString("yyyy-MM-dd"))"
+                               asp-route-guests="@Model.Request.Guests">Listing Demo</a>
+                        </li>
+                        <li><span aria-current="page">@Model.Property.Name</span></li>
+                    </ol>
+                </nav>
+                <h1>@Model.Property.Name</h1>
+                <p class="lead">@Model.Property.Location</p>
+            </header>
+
+            <section class="svp-grid">
+                <article class="sv-card svp-main">
+                    @if (Model.Property.Images.Count > 0)
+                    {
+                        <div class="svp-gallery">
+                            <img class="svp-hero-image" src="@Model.Property.Images[0]" alt="@Model.Property.Name" loading="lazy" />
+                            <div class="svp-gallery-rail">
+                                @foreach (var image in Model.Property.Images.Skip(1).Take(4))
+                                {
+                                    <img src="@image" alt="@Model.Property.Name" loading="lazy" />
+                                }
+                            </div>
+                        </div>
+                    }
+                    <div class="sv-card-body">
+                        @if (!string.IsNullOrWhiteSpace(Model.Property.SubCaption))
+                        {
+                            <p class="sv-sub">@Model.Property.SubCaption</p>
+                        }
+                        <h2>About this property</h2>
+                        <div class="sv-desc sv-desc-full">@Html.Raw(Model.Property.DescriptionHtml)</div>
+                    </div>
+                </article>
+
+                <aside class="sv-card sv-detail-side svp-side">
+                    <div class="svp-side-head">
+                        <h2>Book your stay</h2>
+                        @if (Model.Property.IsAvailableForSelectedDates)
+                        {
+                            <span class="sv-pill sv-pill-good">Available</span>
+                        }
+                        else if (Model.Request.CheckIn.HasValue && Model.Request.CheckOut.HasValue)
+                        {
+                            <span class="sv-pill sv-pill-bad">Unavailable</span>
+                        }
+                    </div>
+
+                    <p class="svp-back-row">
+                        <a class="svp-back-button"
+                           asp-controller="SuperControlListingSiteDemo"
+                           asp-action="Index"
+                           asp-route-where="@Model.Request.Where"
+                           asp-route-checkIn="@(Model.Request.CheckIn?.ToString("yyyy-MM-dd"))"
+                           asp-route-checkOut="@(Model.Request.CheckOut?.ToString("yyyy-MM-dd"))"
+                           asp-route-guests="@Model.Request.Guests">Back to results</a>
+                    </p>
+
+                    <div class="svp-panel">
+                        <h3>Stay details</h3>
+                        <dl class="svp-kv">
+                            <dt>Check-in</dt>
+                            <dd>@(Model.Request.CheckIn?.ToString("yyyy-MM-dd") ?? "Not selected")</dd>
+                            <dt>Check-out</dt>
+                            <dd>@(Model.Request.CheckOut?.ToString("yyyy-MM-dd") ?? "Not selected")</dd>
+                            <dt>Guests</dt>
+                            <dd>@Model.Request.Guests</dd>
+                        </dl>
+                    </div>
+
+                    <div class="svp-panel">
+                        <h3>Pricing and availability</h3>
+                        <dl class="svp-kv">
+                            <dt>From</dt>
+                            <dd>
+                                @if (Model.Property.FromPrice.HasValue)
+                                {
+                                    @Model.Property.FromPrice.Value.ToString("0.##") @Model.Property.Currency
+                                }
+                                else
+                                {
+                                    <span>Not available</span>
+                                }
+                            </dd>
+                            <dt>Next available</dt>
+                            <dd>@(Model.Property.NextKnownAvailableDateUtc?.ToString("yyyy-MM-dd") ?? "Unknown")</dd>
+                        </dl>
+                    </div>
+
+                    <div class="svp-panel">
+                        <h3>Property facts</h3>
+                        <dl class="svp-kv">
+                            <dt>Property ID</dt>
+                            <dd>@Model.Property.PropertyId</dd>
+                            <dt>Type</dt>
+                            <dd>@(string.IsNullOrWhiteSpace(Model.Property.PropertyType) ? "Not set" : Model.Property.PropertyType)</dd>
+                        </dl>
+                    </div>
+
+                    <div class="svp-calendar-block">
+                        <h3>Availability calendar</h3>
+                        @if (Model.HasCalendarKey)
+                        {
+                            <div class="svp-calendar" data-calendar-key="@Model.CalendarKey" data-calendar-property-id="@Model.CalendarPropertyId">
+                                Your widget will appear here.
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="sv-sub">Calendar embed key is not configured.</p>
+                        }
+                    </div>
+                </aside>
+            </section>
+
+            @if (Model.Property.Amenities.Count > 0)
+            {
+                <section class="sv-card">
+                    <h2>Amenities</h2>
+                    <div class="sv-tags">
+                        @foreach (var amenity in Model.Property.Amenities)
+                        {
+                            <span>@amenity</span>
+                        }
+                    </div>
+                </section>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(Model.Property.CheckInTime)
+                || !string.IsNullOrWhiteSpace(Model.Property.CheckOutTime)
+                || Model.Property.ChildrenAllowed.HasValue
+                || Model.Property.PetsAllowed.HasValue
+                || Model.Property.SmokingAllowed.HasValue
+                || Model.Property.AllowBookings.HasValue
+                || Model.Property.AllowEnquiries.HasValue
+                || !string.IsNullOrWhiteSpace(Model.Property.CancellationPolicy)
+                || !string.IsNullOrWhiteSpace(Model.Property.MerchantName)
+                || Model.Property.MaximumOccupancyGuests.HasValue
+                || Model.Property.AcceptedCardPaymentForms.Count > 0)
+            {
+                <section class="sv-card">
+                    <h2>Booking and house rules</h2>
+                    <div class="svp-config-grid">
+                        <div class="svp-panel">
+                            <h3>Times and policy</h3>
+                            <dl class="svp-kv">
+                                @if (!string.IsNullOrWhiteSpace(Model.Property.CheckInTime))
+                                {
+                                    <dt>Check-in time</dt>
+                                    <dd>@Model.Property.CheckInTime</dd>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(Model.Property.CheckOutTime))
+                                {
+                                    <dt>Check-out time</dt>
+                                    <dd>@Model.Property.CheckOutTime</dd>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(Model.Property.CancellationPolicy))
+                                {
+                                    <dt>Cancellation</dt>
+                                    <dd>@Model.Property.CancellationPolicy</dd>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(Model.Property.MerchantName))
+                                {
+                                    <dt>Merchant</dt>
+                                    <dd>@Model.Property.MerchantName</dd>
+                                }
+                            </dl>
+                        </div>
+                        <div class="svp-panel">
+                            <h3>Rules and occupancy</h3>
+                            <dl class="svp-kv">
+                                @if (Model.Property.MaximumOccupancyGuests.HasValue)
+                                {
+                                    <dt>Max guests</dt>
+                                    <dd>@Model.Property.MaximumOccupancyGuests</dd>
+                                }
+                                @if (Model.Property.MaximumOccupancyAdults.HasValue)
+                                {
+                                    <dt>Max adults</dt>
+                                    <dd>@Model.Property.MaximumOccupancyAdults</dd>
+                                }
+                                @if (Model.Property.MaximumOccupancyChildren.HasValue)
+                                {
+                                    <dt>Max children</dt>
+                                    <dd>@Model.Property.MaximumOccupancyChildren</dd>
+                                }
+                                @if (Model.Property.ChildrenAllowed.HasValue)
+                                {
+                                    <dt>Children allowed</dt>
+                                    <dd>@(Model.Property.ChildrenAllowed.Value ? "Yes" : "No")</dd>
+                                }
+                                @if (Model.Property.PetsAllowed.HasValue)
+                                {
+                                    <dt>Pets allowed</dt>
+                                    <dd>@(Model.Property.PetsAllowed.Value ? "Yes" : "No")</dd>
+                                }
+                                @if (Model.Property.SmokingAllowed.HasValue)
+                                {
+                                    <dt>Smoking allowed</dt>
+                                    <dd>@(Model.Property.SmokingAllowed.Value ? "Yes" : "No")</dd>
+                                }
+                                @if (Model.Property.AllowBookings.HasValue)
+                                {
+                                    <dt>Bookings enabled</dt>
+                                    <dd>@(Model.Property.AllowBookings.Value ? "Yes" : "No")</dd>
+                                }
+                                @if (Model.Property.AllowEnquiries.HasValue)
+                                {
+                                    <dt>Enquiries enabled</dt>
+                                    <dd>@(Model.Property.AllowEnquiries.Value ? "Yes" : "No")</dd>
+                                }
+                            </dl>
+                        </div>
+                    </div>
+                    @if (Model.Property.AcceptedCardPaymentForms.Count > 0)
+                    {
+                        <div class="svp-panel">
+                            <h3>Accepted card payment forms</h3>
+                            <div class="sv-tags">
+                                @foreach (var payment in Model.Property.AcceptedCardPaymentForms)
+                                {
+                                    <span>@payment</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                </section>
+            }
+
+            @if (Model.Property.SampleRates.Count > 0)
+            {
+                <section class="sv-card">
+                    <h2>Sample rates</h2>
+                    <div class="sv-table-wrap">
+                        <table class="sv-table">
+                            <thead>
+                                <tr>
+                                    <th>Arrival date</th>
+                                    <th>Best LOS</th>
+                                    <th>Lowest available LOS price</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in Model.Property.SampleRates)
+                                {
+                                    <tr>
+                                        <td>@row.ArrivalDate.ToString("yyyy-MM-dd")</td>
+                                        <td>@row.Nights nights</td>
+                                        <td>@row.MinPrice.ToString("0.##") @Model.Property.Currency</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            }
+        }
+    </div>
+</section>
+
+@section Scripts {
+    <script defer src="https://secure.supercontrol.co.uk/components/embed.js"></script>
+}

@@ -1,0 +1,36 @@
+﻿@model ErrorPageViewModel
+@{
+    ViewData["Title"] = "Error";
+}
+
+<section class="holding-wrap">
+    <div class="ambient-orb orb-a"></div>
+    <div class="ambient-orb orb-b"></div>
+    <div class="holding-card page-panel" role="region" aria-label="Error page">
+        <p class="kicker">Something went wrong</p>
+        <h1>@ViewData["Title"]</h1>
+        <p class="lead">An error occurred while processing your request.</p>
+
+        @if (Model.ShowRequestId)
+        {
+            <p class="meta">
+                <strong>Request ID:</strong> <code class="inline-code">@Model.RequestId</code>
+            </p>
+        }
+
+        <div class="status-grid">
+            <article class="status-block">
+                <h2>For visitors</h2>
+                <p>Try refreshing the page or returning to the home page.</p>
+            </article>
+            <article class="status-block">
+                <h2>For development</h2>
+                <p>Use Development environment only locally to view detailed exception output.</p>
+            </article>
+        </div>
+
+        <div class="page-note">
+            <a class="text-link" asp-controller="Site" asp-action="Index">Return to home</a>
+        </div>
+    </div>
+</section>

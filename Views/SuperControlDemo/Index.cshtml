@@ -1,0 +1,365 @@
+@model petergraves.Features.SuperControlDemo.SuperControlDemoViewModel
+@{
+    ViewData["Title"] = "SuperControl API Demo";
+}
+
+<section class="sc-wrap">
+    <div class="ambient-orb orb-a"></div>
+    <div class="ambient-orb orb-b"></div>
+    <div class="sc-panel">
+        <p class="kicker">Integration Sandbox</p>
+        <nav class="sc-breadcrumb" aria-label="Breadcrumb">
+            <ol>
+                <li><a asp-controller="Site" asp-action="Index">Home</a></li>
+                <li><span aria-current="page">SuperControl API Demo</span></li>
+            </ol>
+        </nav>
+        <h1>SuperControl API Demo</h1>
+        <p class="lead">Run live sample calls against OpenIntegration using your configured <code class="inline-code">SC-TOKEN</code>.</p>
+
+        <div class="sc-grid">
+            <article class="sc-card">
+                <h2>Configuration</h2>
+                <p>Set these keys in <code class="inline-code">web.config</code> under <code class="inline-code">&lt;aspNetCore&gt;&lt;environmentVariables&gt;</code>:</p>
+                <pre class="sc-pre">&lt;environmentVariables&gt;
+  &lt;add name="SuperControl__ApiKey" value="replace-with-live-supercontrol-token" /&gt;
+  &lt;add name="SuperControl__AccountId" value="22263" /&gt;
+  &lt;add name="SuperControl__BaseUrl" value="https://api.supercontrol.co.uk/v3/" /&gt;
+&lt;/environmentVariables&gt;</pre>
+                <p>Keep live values server-side only.</p>
+            </article>
+
+            <article class="sc-card">
+                <h2>Status</h2>
+                @if (!Model.HasApiKey)
+                {
+                    <p class="sc-status sc-status-bad">API key missing</p>
+                    <p>Set <code class="inline-code">SuperControl__ApiKey</code> and reload.</p>
+                }
+                else
+                {
+                    <p class="sc-status sc-status-good">API key detected</p>
+                    <p>Ready to run demo requests.</p>
+                }
+
+                <form method="post" asp-controller="SuperControlDemo" asp-action="RunDemo">
+                    <button type="submit" class="sc-button">Run Demo Calls</button>
+                </form>
+
+                <form method="post" asp-controller="SuperControlDemo" asp-action="RefreshCache" class="sc-inline-form">
+                    <label class="sc-field" for="cache-refresh-cadence">
+                        <span class="sc-field-label">Cache cadence</span>
+                        <select id="cache-refresh-cadence" name="cacheRefreshCadence" class="sc-select">
+                            <option value="accounts">Accounts (12h)</option>
+                            <option value="content-config">Content + Configuration (6h)</option>
+                            <option value="prices-availability">Prices + Availability (30m)</option>
+                            <option value="all">All cadence groups</option>
+                        </select>
+                    </label>
+                    <button type="submit" class="sc-button">Refresh Cache Cadence</button>
+                </form>
+                <p class="sc-hint">Uses the same cadence logic as <code class="inline-code">/internal/supercontrol/cache-refresh</code>.</p>
+            </article>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Model.Error))
+        {
+            <article class="sc-card sc-card-error">
+                <h2>Error</h2>
+                <pre class="sc-pre">@Model.Error</pre>
+            </article>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.CacheRefreshSummary))
+        {
+            <article class="sc-card">
+                <div class="sc-title-row">
+                    <h2>Cache Refresh Run</h2>
+                    @if (Model.CacheRefreshSucceeded is bool refreshSuccess)
+                    {
+                        <span class="sc-status @(refreshSuccess ? "sc-status-good" : "sc-status-bad")">@Model.CacheRefreshSummary</span>
+                    }
+                    else
+                    {
+                        <span class="sc-status sc-status-neutral">@Model.CacheRefreshSummary</span>
+                    }
+                </div>
+                <p><code class="inline-code">POST /internal/supercontrol/cache-refresh?cadence=...</code></p>
+                @if (!string.IsNullOrWhiteSpace(Model.CacheRefreshJson))
+                {
+                    <pre class="sc-pre sc-pre-response">@Model.CacheRefreshJson</pre>
+                }
+            </article>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.AccountsIndexSummary))
+        {
+            <article class="sc-card">
+                <div class="sc-title-row">
+                    <h2>1) Accounts Index</h2>
+                    <span class="sc-status @(Model.AccountsIndexSucceeded ? "sc-status-good" : "sc-status-bad")">@Model.AccountsIndexSummary</span>
+                </div>
+                <p><code class="inline-code">GET /properties/index</code></p>
+                @if (Model.Accounts.Count > 0)
+                {
+                    <div class="sc-metrics">
+                        <div class="sc-metric">
+                            <span class="sc-metric-label">Accounts</span>
+                            <strong>@Model.Accounts.Count</strong>
+                        </div>
+                        <div class="sc-metric">
+                            <span class="sc-metric-label">Primary Account</span>
+                            <strong>@Model.Accounts[0].AccountId</strong>
+                        </div>
+                    </div>
+                    <div class="sc-table-wrap">
+                        <table class="sc-table">
+                            <thead>
+                                <tr>
+                                    <th>Account ID</th>
+                                    <th>Company</th>
+                                    <th>Content Endpoint</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var account in Model.Accounts)
+                                {
+                                    <tr>
+                                        <td>@account.AccountId</td>
+                                        <td>@account.CompanyName</td>
+                                        <td><code class="inline-code">@account.ContentIndexUrl</code></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(Model.AccountsIndexJson))
+                {
+                    <pre class="sc-pre sc-pre-response">@Model.AccountsIndexJson</pre>
+                }
+            </article>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.ContentIndexSummary))
+        {
+            <article class="sc-card">
+                <div class="sc-title-row">
+                    <h2>2) Content Index</h2>
+                    @if (Model.ContentIndexSucceeded is bool contentSuccess)
+                    {
+                        <span class="sc-status @(contentSuccess ? "sc-status-good" : "sc-status-bad")">@Model.ContentIndexSummary</span>
+                    }
+                    else
+                    {
+                        <span class="sc-status sc-status-neutral">@Model.ContentIndexSummary</span>
+                    }
+                </div>
+                <p><code class="inline-code">GET /properties/contentindex/{accountId}</code></p>
+                @if (Model.Properties.Count > 0)
+                {
+                    <div class="sc-metrics">
+                        <div class="sc-metric">
+                            <span class="sc-metric-label">Properties</span>
+                            <strong>@Model.Properties.Count</strong>
+                        </div>
+                        <div class="sc-metric">
+                            <span class="sc-metric-label">Active</span>
+                            <strong>@Model.ActivePropertyCount</strong>
+                        </div>
+                        <div class="sc-metric">
+                            <span class="sc-metric-label">Inactive</span>
+                            <strong>@Model.InactivePropertyCount</strong>
+                        </div>
+                    </div>
+                    <div class="sc-table-wrap">
+                        <table class="sc-table">
+                            <thead>
+                                <tr>
+                                    <th>Property ID</th>
+                                    <th>Status</th>
+                                    <th>Last Updated (UTC)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var property in Model.Properties.OrderByDescending(property => property.Active).ThenByDescending(property => property.LastUpdated))
+                                {
+                                    <tr>
+                                        <td>@property.PropertyId</td>
+                                        <td>
+                                            <span class="sc-status @(property.Active ? "sc-status-good" : "sc-status-neutral")">
+                                                @(property.Active ? "Active" : "Inactive")
+                                            </span>
+                                        </td>
+                                        <td>@property.LastUpdated.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(Model.ContentIndexJson))
+                {
+                    <pre class="sc-pre sc-pre-response">@Model.ContentIndexJson</pre>
+                }
+            </article>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.PropertyListingSummary))
+        {
+            <article class="sc-card">
+                <div class="sc-title-row">
+                    <h2>3) Property Listing (featured)</h2>
+                    @if (Model.PropertyListingSucceeded is bool listingSuccess)
+                    {
+                        <span class="sc-status @(listingSuccess ? "sc-status-good" : "sc-status-bad")">@Model.PropertyListingSummary</span>
+                    }
+                </div>
+                @if (!string.IsNullOrWhiteSpace(Model.FeaturedPropertyName))
+                {
+                    <p>Parsed property name: <strong>@Model.FeaturedPropertyName</strong></p>
+                }
+                <p><code class="inline-code">GET /properties/listing/{propertyId}</code></p>
+                @if (!string.IsNullOrWhiteSpace(Model.PropertyListingJson))
+                {
+                    <pre class="sc-pre sc-pre-response">@Model.PropertyListingJson</pre>
+                }
+            </article>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.ConfigurationIndex.Summary))
+        {
+            <article class="sc-card">
+                <div class="sc-title-row">
+                    <h2>4) Configuration Index</h2>
+                    @if (Model.ConfigurationIndex.Succeeded is bool endpointSuccess)
+                    {
+                        <span class="sc-status @(endpointSuccess ? "sc-status-good" : "sc-status-bad")">@Model.ConfigurationIndex.Summary</span>
+                    }
+                    else
+                    {
+                        <span class="sc-status sc-status-neutral">@Model.ConfigurationIndex.Summary</span>
+                    }
+                </div>
+                <p><code class="inline-code">@Model.ConfigurationIndex.Label</code></p>
+                @if (!string.IsNullOrWhiteSpace(Model.ConfigurationIndex.Json))
+                {
+                    <pre class="sc-pre sc-pre-response">@Model.ConfigurationIndex.Json</pre>
+                }
+            </article>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.PricesIndex.Summary))
+        {
+            <article class="sc-card">
+                <div class="sc-title-row">
+                    <h2>5) Prices Index</h2>
+                    @if (Model.PricesIndex.Succeeded is bool endpointSuccess)
+                    {
+                        <span class="sc-status @(endpointSuccess ? "sc-status-good" : "sc-status-bad")">@Model.PricesIndex.Summary</span>
+                    }
+                    else
+                    {
+                        <span class="sc-status sc-status-neutral">@Model.PricesIndex.Summary</span>
+                    }
+                </div>
+                <p><code class="inline-code">@Model.PricesIndex.Label</code></p>
+                @if (!string.IsNullOrWhiteSpace(Model.PricesIndex.Json))
+                {
+                    <pre class="sc-pre sc-pre-response">@Model.PricesIndex.Json</pre>
+                }
+            </article>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.AvailabilityIndex.Summary))
+        {
+            <article class="sc-card">
+                <div class="sc-title-row">
+                    <h2>6) Availability Index</h2>
+                    @if (Model.AvailabilityIndex.Succeeded is bool endpointSuccess)
+                    {
+                        <span class="sc-status @(endpointSuccess ? "sc-status-good" : "sc-status-bad")">@Model.AvailabilityIndex.Summary</span>
+                    }
+                    else
+                    {
+                        <span class="sc-status sc-status-neutral">@Model.AvailabilityIndex.Summary</span>
+                    }
+                </div>
+                <p><code class="inline-code">@Model.AvailabilityIndex.Label</code></p>
+                @if (!string.IsNullOrWhiteSpace(Model.AvailabilityIndex.Json))
+                {
+                    <pre class="sc-pre sc-pre-response">@Model.AvailabilityIndex.Json</pre>
+                }
+            </article>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.PropertyConfigurationListing.Summary))
+        {
+            <article class="sc-card">
+                <div class="sc-title-row">
+                    <h2>7) Property Configuration Listing (featured)</h2>
+                    @if (Model.PropertyConfigurationListing.Succeeded is bool endpointSuccess)
+                    {
+                        <span class="sc-status @(endpointSuccess ? "sc-status-good" : "sc-status-bad")">@Model.PropertyConfigurationListing.Summary</span>
+                    }
+                    else
+                    {
+                        <span class="sc-status sc-status-neutral">@Model.PropertyConfigurationListing.Summary</span>
+                    }
+                </div>
+                <p><code class="inline-code">@Model.PropertyConfigurationListing.Label</code></p>
+                @if (!string.IsNullOrWhiteSpace(Model.PropertyConfigurationListing.Json))
+                {
+                    <pre class="sc-pre sc-pre-response">@Model.PropertyConfigurationListing.Json</pre>
+                }
+            </article>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.PricesListing.Summary))
+        {
+            <article class="sc-card">
+                <div class="sc-title-row">
+                    <h2>8) Prices Listing (featured)</h2>
+                    @if (Model.PricesListing.Succeeded is bool endpointSuccess)
+                    {
+                        <span class="sc-status @(endpointSuccess ? "sc-status-good" : "sc-status-bad")">@Model.PricesListing.Summary</span>
+                    }
+                    else
+                    {
+                        <span class="sc-status sc-status-neutral">@Model.PricesListing.Summary</span>
+                    }
+                </div>
+                <p><code class="inline-code">@Model.PricesListing.Label</code></p>
+                @if (!string.IsNullOrWhiteSpace(Model.PricesListing.Json))
+                {
+                    <pre class="sc-pre sc-pre-response">@Model.PricesListing.Json</pre>
+                }
+            </article>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.AvailabilityListing.Summary))
+        {
+            <article class="sc-card">
+                <div class="sc-title-row">
+                    <h2>9) Availability Listing (featured)</h2>
+                    @if (Model.AvailabilityListing.Succeeded is bool endpointSuccess)
+                    {
+                        <span class="sc-status @(endpointSuccess ? "sc-status-good" : "sc-status-bad")">@Model.AvailabilityListing.Summary</span>
+                    }
+                    else
+                    {
+                        <span class="sc-status sc-status-neutral">@Model.AvailabilityListing.Summary</span>
+                    }
+                </div>
+                <p><code class="inline-code">@Model.AvailabilityListing.Label</code></p>
+                @if (!string.IsNullOrWhiteSpace(Model.AvailabilityListing.Json))
+                {
+                    <pre class="sc-pre sc-pre-response">@Model.AvailabilityListing.Json</pre>
+                }
+            </article>
+        }
+
+        <p><a class="text-link" href="/supercontrol-listing-site-demo">Open listing site demo</a></p>
+        <p><a class="text-link" href="/">Back to home</a></p>
+    </div>
+</section>

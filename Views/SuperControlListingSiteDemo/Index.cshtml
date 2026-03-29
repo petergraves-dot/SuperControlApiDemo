@@ -1,0 +1,220 @@
+@model petergraves.ViewModels.SuperControlListingSiteDemo.SuperControlListingSiteDemoResponseViewModel
+@{
+    ViewData["Title"] = "SuperControl Listing Site Demo";
+}
+
+<section class="sv-wrap">
+    <div class="ambient-orb orb-a"></div>
+    <div class="ambient-orb orb-b"></div>
+
+    <div class="sv-shell">
+        <header class="sv-hero">
+            <p class="kicker">Tutorial Demo</p>
+            <nav class="sv-breadcrumb" aria-label="Breadcrumb">
+                <ol>
+                    <li><a asp-controller="Site" asp-action="Index">Home</a></li>
+                    <li><a asp-controller="SuperControlDemo" asp-action="Index">SuperControl API Demo</a></li>
+                    <li><span aria-current="page">Listing Demo</span></li>
+                </ol>
+            </nav>
+            <h1>Listing Site Property Discovery with SuperControl API</h1>
+            <p class="lead">Search active properties, browse listing cards, and surface live price and availability signals from SuperControl endpoints.</p>
+        </header>
+
+        <form method="get" class="sv-search">
+            <label>
+                <span>Where</span>
+                <input type="text" name="where" value="@Model.Request.Where" placeholder="Try city, country, or keyword" />
+            </label>
+            <label>
+                <span>Check-in</span>
+                <input type="date" name="checkIn" value="@Model.Request.CheckIn?.ToString("yyyy-MM-dd")" />
+            </label>
+            <label>
+                <span>Check-out</span>
+                <input type="date" name="checkOut" value="@Model.Request.CheckOut?.ToString("yyyy-MM-dd")" />
+            </label>
+            <label>
+                <span>Guests</span>
+                <input type="number" name="guests" min="1" max="30" value="@Model.Request.Guests" />
+            </label>
+            <button type="submit">Search</button>
+        </form>
+
+        @if (!string.IsNullOrWhiteSpace(Model.Error))
+        {
+            <article class="sv-alert">
+                <strong>Data load issue:</strong> @Model.Error
+            </article>
+        }
+
+        @if (Model.Loaded)
+        {
+            <section class="sv-stats">
+                <article>
+                    <span>Active in account</span>
+                    <strong>@Model.Stats.TotalActiveProperties</strong>
+                </article>
+                <article>
+                    <span>Displayed</span>
+                    <strong>@Model.Stats.ReturnedProperties</strong>
+                </article>
+                <article>
+                    <span>Account ID</span>
+                    <strong>@Model.AccountId</strong>
+                </article>
+                <article>
+                    <span>Cache Hits</span>
+                    <strong>@Model.Stats.CacheHits</strong>
+                </article>
+                <article>
+                    <span>Cache Misses</span>
+                    <strong>@Model.Stats.CacheMisses</strong>
+                </article>
+                <article>
+                    <span>Stale Fallbacks</span>
+                    <strong>@Model.Stats.StaleFallbackHits</strong>
+                </article>
+            </section>
+
+            @if (Model.Properties.Count == 0)
+            {
+                <article class="sv-empty">
+                    <h2>No properties matched your search</h2>
+                    <p>Try clearing the location keyword or broadening your dates.</p>
+                </article>
+            }
+            else
+            {
+                <section class="sv-grid">
+                    @foreach (var property in Model.Properties)
+                    {
+                        <article class="sv-card">
+                            <div class="sv-media">
+                                          <a asp-controller="SuperControlProperty"
+                                              asp-action="Index"
+                                   asp-route-propertyId="@property.PropertyId"
+                                   asp-route-where="@Model.Request.Where"
+                                   asp-route-checkIn="@Model.Request.CheckIn?.ToString("yyyy-MM-dd")"
+                                   asp-route-checkOut="@Model.Request.CheckOut?.ToString("yyyy-MM-dd")"
+                                   asp-route-guests="@Model.Request.Guests">
+                                    @if (!string.IsNullOrWhiteSpace(property.HeroImageUrl))
+                                    {
+                                        <img src="@property.HeroImageUrl" alt="@property.Name" loading="lazy" />
+                                    }
+                                    else
+                                    {
+                                        <div class="sv-media-fallback">No photo</div>
+                                    }
+                                </a>
+                            </div>
+                            <div class="sv-card-body">
+                                <div class="sv-title-row">
+                                    <h3>
+                                                     <a asp-controller="SuperControlProperty"
+                                                         asp-action="Index"
+                                           asp-route-propertyId="@property.PropertyId"
+                                           asp-route-where="@Model.Request.Where"
+                                           asp-route-checkIn="@Model.Request.CheckIn?.ToString("yyyy-MM-dd")"
+                                           asp-route-checkOut="@Model.Request.CheckOut?.ToString("yyyy-MM-dd")"
+                                           asp-route-guests="@Model.Request.Guests">@property.Name</a>
+                                    </h3>
+                                    @if (property.IsAvailableForSelectedDates)
+                                    {
+                                        <span class="sv-pill sv-pill-good">Available</span>
+                                    }
+                                    else if (Model.Request.CheckIn.HasValue && Model.Request.CheckOut.HasValue)
+                                    {
+                                        <span class="sv-pill sv-pill-bad">Unavailable</span>
+                                    }
+                                </div>
+                                <p class="sv-location">@property.Location</p>
+                                @if (!string.IsNullOrWhiteSpace(property.SubCaption))
+                                {
+                                    <p class="sv-sub">@property.SubCaption</p>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(property.DescriptionHtml))
+                                {
+                                    <div class="sv-desc">@Html.Raw(property.DescriptionHtml)</div>
+                                }
+                                <div class="sv-meta">
+                                    <span>Property #@property.PropertyId</span>
+                                    @if (!string.IsNullOrWhiteSpace(property.PropertyType))
+                                    {
+                                        <span>@property.PropertyType</span>
+                                    }
+                                    <span>Updated @property.LastUpdatedUtc.ToString("yyyy-MM-dd")</span>
+                                </div>
+                                <div class="sv-tags">
+                                    @foreach (var amenity in property.Amenities)
+                                    {
+                                        <span>@amenity</span>
+                                    }
+                                </div>
+                                <div class="sv-price-row">
+                                    @if (property.SelectedStayPrice.HasValue && property.SelectedStayNights.HasValue)
+                                    {
+                                        <div class="sv-price">
+                                            <small>Stay total (@property.SelectedStayNights.Value nights)</small>
+                                            <strong>@property.SelectedStayPrice.Value.ToString("0.##") @property.Currency</strong>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="sv-price">
+                                            <small>Stay total</small>
+                                            <strong>Not available for selected dates</strong>
+                                        </div>
+                                    }
+                                    @if (property.FromPrice.HasValue)
+                                    {
+                                        <div class="sv-price">
+                                            <small>From</small>
+                                            <strong>@property.FromPrice.Value.ToString("0.##") @property.Currency</strong>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="sv-price">
+                                            <small>From</small>
+                                            <strong>Price unavailable</strong>
+                                        </div>
+                                    }
+                                    @if (property.NextKnownAvailableDateUtc.HasValue)
+                                    {
+                                        <div class="sv-price">
+                                            <small>Next available</small>
+                                            <strong>@property.NextKnownAvailableDateUtc.Value.ToString("yyyy-MM-dd")</strong>
+                                        </div>
+                                    }
+                                </div>
+                                <p class="sv-cta-row">
+                                                <a class="sv-detail-link"
+                                                    asp-controller="SuperControlProperty"
+                                                    asp-action="Index"
+                                       asp-route-propertyId="@property.PropertyId"
+                                       asp-route-where="@Model.Request.Where"
+                                       asp-route-checkIn="@Model.Request.CheckIn?.ToString("yyyy-MM-dd")"
+                                       asp-route-checkOut="@Model.Request.CheckOut?.ToString("yyyy-MM-dd")"
+                                       asp-route-guests="@Model.Request.Guests">View property details</a>
+                                </p>
+                            </div>
+                        </article>
+                    }
+                </section>
+            }
+        }
+
+        <section class="sv-doc">
+            <h2>Tutorial wiring</h2>
+            <ol>
+                <li>Pull <code>ContentIndex</code> to discover active properties and listing URLs.</li>
+                <li>Pull <code>PricesIndex</code> and <code>AvailabilityIndex</code> for per-property listing endpoints.</li>
+                <li>Hydrate listing cards with <code>Listing</code>, then enrich with <code>Prices</code> and <code>Availability</code>.</li>
+                <li>Cache payloads and re-query indexes on a schedule to keep pages fresh.</li>
+            </ol>
+            <p><a class="text-link" href="/supercontrol-listing-site-tutorial">Open full implementation tutorial</a></p>
+            <p><a class="text-link" href="/supercontrol-demo">Open diagnostics page</a></p>
+        </section>
+    </div>
+</section>

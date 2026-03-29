@@ -1,0 +1,7 @@
+bin/
+obj/
+.vs/
+.vscode/
+publish/
+.DS_Store
+.supercontrol-cache/
