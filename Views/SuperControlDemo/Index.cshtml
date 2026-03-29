@@ -20,12 +20,13 @@
         <div class="sc-grid">
             <article class="sc-card">
                 <h2>Configuration</h2>
-                <p>Set these keys in <code class="inline-code">web.config</code> under <code class="inline-code">&lt;aspNetCore&gt;&lt;environmentVariables&gt;</code>:</p>
-                <pre class="sc-pre">&lt;environmentVariables&gt;
-  &lt;add name="SuperControl__ApiKey" value="replace-with-live-supercontrol-token" /&gt;
-  &lt;add name="SuperControl__AccountId" value="22263" /&gt;
-  &lt;add name="SuperControl__BaseUrl" value="https://api.supercontrol.co.uk/v3/" /&gt;
-&lt;/environmentVariables&gt;</pre>
+                                <p>Set these values in <code class="inline-code">appsettings.json</code> under <code class="inline-code">SuperControl</code>:</p>
+                                <pre class="sc-pre">"SuperControl": {
+    "ApiKey": "replace-with-live-supercontrol-token",
+    "AccountId": 22263,
+    "BaseUrl": "https://api.supercontrol.co.uk/v3/"
+}</pre>
+                                <p>Environment variables are also supported and override appsettings values (for example <code class="inline-code">SuperControl__ApiKey</code>).</p>
                 <p>Keep live values server-side only.</p>
             </article>
 
