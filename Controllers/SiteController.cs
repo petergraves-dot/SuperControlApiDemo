@@ -18,6 +18,12 @@ public sealed class SiteController : Controller
         return View("~/Views/SuperControlListingSiteTutorial/Index.cshtml");
     }
 
+    [HttpGet("/supercontrol-data-export-tutorial")]
+    public IActionResult SuperControlDataExportTutorial()
+    {
+        return View("~/Views/SuperControlDataExportTutorial/Index.cshtml");
+    }
+
     [HttpGet("/Error")]
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     public IActionResult Error()

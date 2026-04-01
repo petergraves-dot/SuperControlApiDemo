@@ -59,7 +59,8 @@
                     </label>
                     <button type="submit" class="sc-button">Refresh Cache Cadence</button>
                 </form>
-                <p class="sc-hint">Uses the same cadence logic as <code class="inline-code">/internal/supercontrol/cache-refresh</code>.</p>
+                <p class="sc-hint">Uses the same cadence logic as <code class="inline-code">/internal/supercontrol/cache-refresh</code> (POST only).</p>
+                <p class="sc-hint">Refresh calls are rate-limited to 6 requests per minute. Extra requests return HTTP 429.</p>
             </article>
         </div>
 
@@ -86,6 +87,7 @@
                     }
                 </div>
                 <p><code class="inline-code">POST /internal/supercontrol/cache-refresh?cadence=...</code></p>
+                <p class="sc-hint">Protected by anti-forgery validation and endpoint rate limiting.</p>
                 @if (!string.IsNullOrWhiteSpace(Model.CacheRefreshJson))
                 {
                     <pre class="sc-pre sc-pre-response">@Model.CacheRefreshJson</pre>
@@ -360,7 +362,7 @@
             </article>
         }
 
-        <p><a class="text-link" href="/supercontrol-listing-site-demo">Open listing site demo</a></p>
+        <p><a class="text-link" href="/supercontrol-listing-site-demo">Open listing site demo</a> · <a class="text-link" href="/supercontrol-data-export">Open data export demo</a></p>
         <p><a class="text-link" href="/">Back to home</a></p>
     </div>
 </section>

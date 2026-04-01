@@ -1,0 +1,163 @@
+@model petergraves.ViewModels.SuperControlDataExportDemo.DataExportBookingsResponseViewModel
+@{
+    ViewData["Title"] = "SuperControl Data Export Demo";
+}
+
+<section class="sv-wrap">
+    <div class="ambient-orb orb-a"></div>
+    <div class="ambient-orb orb-b"></div>
+
+    <div class="sv-shell">
+        <header class="sv-hero">
+            <p class="kicker">Data Export Demo</p>
+            <nav class="sv-breadcrumb" aria-label="Breadcrumb">
+                <ol>
+                    <li><a asp-controller="Site" asp-action="Index">Home</a></li>
+                    <li><a asp-controller="SuperControlDemo" asp-action="Index">SuperControl API Demo</a></li>
+                    <li><span aria-current="page">Data Export Bookings</span></li>
+                </ol>
+            </nav>
+            <h1>Data Export Bookings (XML)</h1>
+            <p class="lead">Run Data Export booking queries using SC-TOKEN and inspect parsed and raw XML output.</p>
+        </header>
+
+        <form method="get" class="sv-search">
+            <label>
+                <span>Search mode</span>
+                <select name="searchMode">
+                    <option value="single" selected="@(Model.Request.SearchMode == "single" ? "selected" : null)">Single booking</option>
+                    <option value="dateRange" selected="@(Model.Request.SearchMode == "dateRange" ? "selected" : null)">Date range</option>
+                    <option value="lastUpdate" selected="@(Model.Request.SearchMode == "lastUpdate" ? "selected" : null)">Last update</option>
+                </select>
+            </label>
+            <label>
+                <span>Booking ID</span>
+                <input type="number" name="bookingId" value="@Model.Request.BookingId" min="1" />
+            </label>
+            <label>
+                <span>Owner Booking ID</span>
+                <input type="number" name="ownerBookingId" value="@Model.Request.OwnerBookingId" min="1" />
+            </label>
+            <label>
+                <span>Owner Ref</span>
+                <input type="text" name="ownerRef" value="@Model.Request.OwnerRef" />
+            </label>
+            <label>
+                <span>Start Date</span>
+                <input type="date" name="startDate" value="@Model.Request.StartDate?.ToString("yyyy-MM-dd")" />
+            </label>
+            <label>
+                <span>End Date</span>
+                <input type="date" name="endDate" value="@Model.Request.EndDate?.ToString("yyyy-MM-dd")" />
+            </label>
+            <label>
+                <span>Last Update</span>
+                <input type="date" name="lastUpdate" value="@Model.Request.LastUpdate?.ToString("yyyy-MM-dd")" />
+            </label>
+            <label>
+                <span>Status</span>
+                <select name="bookingStatus">
+                    <option value="" selected="@(string.IsNullOrWhiteSpace(Model.Request.BookingStatus) ? "selected" : null)">Any</option>
+                    <option value="reserved" selected="@(Model.Request.BookingStatus == "reserved" ? "selected" : null)">Reserved</option>
+                    <option value="cancelled" selected="@(Model.Request.BookingStatus == "cancelled" ? "selected" : null)">Cancelled</option>
+                    <option value="completed" selected="@(Model.Request.BookingStatus == "completed" ? "selected" : null)">Completed</option>
+                </select>
+            </label>
+            <label>
+                <span>Limit</span>
+                <input type="number" name="limit" value="@Model.Request.Limit" min="1" max="1000" />
+            </label>
+            <label>
+                <span>Page</span>
+                <input type="number" name="page" value="@Model.Request.Page" min="1" />
+            </label>
+            <button type="submit">Run query</button>
+        </form>
+
+        <p><a class="text-link" asp-controller="SuperControlDataExportDemo" asp-action="Properties">Open Data Export properties endpoint demo</a></p>
+        <p><a class="text-link" asp-controller="Site" asp-action="SuperControlDataExportTutorial">Open Data Export tutorial</a></p>
+
+        @if (!string.IsNullOrWhiteSpace(Model.Error))
+        {
+            <article class="sv-alert">
+                <strong>Data load issue:</strong> @Model.Error
+            </article>
+        }
+
+        @if (Model.Loaded)
+        {
+            <section class="sv-stats">
+                <article>
+                    <span>Current page</span>
+                    <strong>@Model.CurrentPage</strong>
+                </article>
+                <article>
+                    <span>Total pages</span>
+                    <strong>@Model.TotalPages</strong>
+                </article>
+                <article>
+                    <span>Bookings returned</span>
+                    <strong>@Model.Bookings.Count</strong>
+                </article>
+            </section>
+
+            @if (Model.Bookings.Count == 0)
+            {
+                <article class="sv-empty">
+                    <h2>No bookings returned</h2>
+                    <p>Adjust your filters and try again.</p>
+                </article>
+            }
+            else
+            {
+                <section class="sv-grid">
+                    @foreach (var booking in Model.Bookings)
+                    {
+                        <article class="sv-card">
+                            <div class="sv-card-body">
+                                <div class="sv-title-row">
+                                    <h3>Booking #@booking.BookingId</h3>
+                                    <span class="sv-pill">@booking.Status</span>
+                                </div>
+                                <p class="sv-sub">@booking.Type | @booking.BookingDate | @booking.Currency</p>
+                                <p class="sv-location">Guest: @booking.GuestName (@booking.GuestEmail)</p>
+                                @if (!string.IsNullOrWhiteSpace(booking.ClientRef))
+                                {
+                                    <p class="sv-sub">Client Ref: @booking.ClientRef</p>
+                                }
+                                @if (booking.Properties.Count > 0)
+                                {
+                                    <div class="sv-tags">
+                                        @foreach (var property in booking.Properties)
+                                        {
+                                            <span>#@property.PropertyId @property.Start to @property.End (Total: @property.Total)</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </article>
+                    }
+                </section>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(Model.RawXml))
+            {
+                <section class="sv-doc">
+                    <h2>Raw XML</h2>
+                    <pre class="sc-pre">@Model.RawXml</pre>
+                </section>
+            }
+        }
+        else
+        {
+            <section class="sv-doc">
+                <h2>How to query</h2>
+                <ol>
+                    <li>For <code>single</code>, provide one of Booking ID, Owner Booking ID, or Owner Ref.</li>
+                    <li>For <code>dateRange</code>, provide both Start Date and End Date.</li>
+                    <li>For <code>lastUpdate</code>, provide Last Update.</li>
+                </ol>
+            </section>
+        }
+    </div>
+</section>

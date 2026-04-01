@@ -12,6 +12,7 @@
             <nav class="sv-breadcrumb" aria-label="Breadcrumb">
                 <ol>
                     <li><a asp-controller="Site" asp-action="Index">Home</a></li>
+                    <li><a asp-controller="SuperControlDemo" asp-action="Index">SuperControl API Demo</a></li>
                     <li><a asp-controller="SuperControlListingSiteDemo" asp-action="Index">Listing Demo</a></li>
                     <li><span aria-current="page">Tutorial</span></li>
                 </ol>
@@ -121,6 +122,13 @@ builder.Services.AddScoped&lt;ISuperControlListingSiteService, SuperControlListi
                 <li><code>GET /properties/configurationindex/{accountId}</code></li>
                 <li><code>configurationContentUrl</code> for full property configuration payload</li>
             </ul>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Security and rate limiting best practice</h2>
+            <p>Keep public listing endpoints and operational maintenance endpoints separate. If you expose an internal refresh route (for example cache cadence refresh), use <code>POST</code> only, require anti-forgery validation for browser requests, and apply endpoint-specific rate limiting.</p>
+            <p>For this project, a practical baseline is a fixed window limiter for refresh operations (6 requests per minute) with HTTP 429 returned when callers exceed the budget.</p>
+            <p>This prevents accidental or malicious refresh storms from consuming API quota and degrading listing performance.</p>
         </section>
 
         <section class="sv-doc">
