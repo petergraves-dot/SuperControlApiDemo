@@ -10,6 +10,26 @@ namespace petergraves.Features.SuperControlDataExportDemo;
 
 public sealed class DataExportDemoViewModelFactory : IDataExportDemoViewModelFactory
 {
+    private static readonly HashSet<string> PiiXmlElementNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "FirstName",
+        "LastName",
+        "Address1",
+        "Address2",
+        "Town",
+        "Postcode",
+        "County",
+        "TelMain",
+        "TelAlt",
+        "TelMobile",
+        "Email",
+        "GuestId",
+        "ClientRef",
+        "address",
+        "town",
+        "postcode"
+    };
+
     private readonly ISuperControlClient _client;
     private readonly SuperControlOptions _options;
 
@@ -42,7 +62,7 @@ public sealed class DataExportDemoViewModelFactory : IDataExportDemoViewModelFac
 
         var apiResponse = await _client.GetDataExportBookingsAsync(queryString, cancellationToken);
         var body = apiResponse.Body.Trim();
-        var anonymizedBody = AnonymizeXmlEmails(body);
+        var anonymizedBody = AnonymizeXmlPii(body);
 
         if (IsApiErrorResponse(body))
         {
@@ -93,6 +113,7 @@ public sealed class DataExportDemoViewModelFactory : IDataExportDemoViewModelFac
 
         var apiResponse = await _client.GetDataExportPropertiesAsync(cancellationToken);
         var body = apiResponse.Body.Trim();
+        var anonymizedBody = AnonymizeXmlPii(body);
 
         if (IsApiErrorResponse(body))
         {
@@ -100,7 +121,7 @@ public sealed class DataExportDemoViewModelFactory : IDataExportDemoViewModelFac
             {
                 Loaded = true,
                 Error = ExtractStringMessage(body),
-                RawXml = body
+                RawXml = anonymizedBody
             };
         }
 
@@ -116,14 +137,14 @@ public sealed class DataExportDemoViewModelFactory : IDataExportDemoViewModelFac
                     PropertyName = p.PropertyName,
                     Arrive = p.Arrive,
                     Depart = p.Depart,
-                    Address = p.Address,
-                    Town = p.Town,
-                    Postcode = p.Postcode,
+                    Address = AnonymizeFreeText(p.Address),
+                    Town = AnonymizeFreeText(p.Town),
+                    Postcode = AnonymizePostcode(p.Postcode),
                     Country = p.Country,
                     Longitude = p.Longitude,
                     Latitude = p.Latitude
                 }).ToList(),
-                RawXml = FormatXml(body)
+                RawXml = FormatXml(anonymizedBody)
             };
         }
         catch (Exception ex)
@@ -132,7 +153,7 @@ public sealed class DataExportDemoViewModelFactory : IDataExportDemoViewModelFac
             {
                 Loaded = true,
                 Error = $"Failed to parse API response: {ex.Message}",
-                RawXml = body
+                RawXml = anonymizedBody
             };
         }
     }
@@ -187,7 +208,7 @@ public sealed class DataExportDemoViewModelFactory : IDataExportDemoViewModelFac
     {
         var guestName = b.Guest is null
             ? string.Empty
-            : $"{b.Guest.FirstName} {b.Guest.LastName}".Trim();
+            : AnonymizePersonName(b.Guest.FirstName, b.Guest.LastName);
 
         return new DataExportBookingViewModel
         {
@@ -196,7 +217,7 @@ public sealed class DataExportDemoViewModelFactory : IDataExportDemoViewModelFac
             Status = b.Status,
             Type = b.Type,
             Currency = b.Currency,
-            ClientRef = b.ClientRef,
+            ClientRef = AnonymizeIdentifier(b.ClientRef),
             GuestName = guestName,
             GuestEmail = AnonymizeEmail(b.Guest?.Email),
             GuestCountry = b.Guest?.Country ?? string.Empty,
@@ -231,7 +252,7 @@ public sealed class DataExportDemoViewModelFactory : IDataExportDemoViewModelFac
         return (T)serializer.Deserialize(reader)!;
     }
 
-    private static string AnonymizeXmlEmails(string xml)
+    private static string AnonymizeXmlPii(string xml)
     {
         if (string.IsNullOrWhiteSpace(xml))
         {
@@ -241,23 +262,74 @@ public sealed class DataExportDemoViewModelFactory : IDataExportDemoViewModelFac
         try
         {
             var document = XDocument.Parse(xml);
-            foreach (var emailElement in document
+            foreach (var element in document
                          .Descendants()
-                         .Where(element => element.Name.LocalName.Equals("Email", StringComparison.OrdinalIgnoreCase)))
+                         .Where(element => PiiXmlElementNames.Contains(element.Name.LocalName)))
             {
-                emailElement.Value = AnonymizeEmail(emailElement.Value);
+                var name = element.Name.LocalName;
+                element.Value = AnonymizeXmlValue(name, element.Value);
             }
 
             return document.ToString(SaveOptions.None);
         }
         catch
         {
-            return Regex.Replace(
+            var anonymized = Regex.Replace(
                 xml,
                 @"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}",
                 match => AnonymizeEmail(match.Value),
                 RegexOptions.IgnoreCase);
+
+            anonymized = RedactXmlTagValueWithRegex(anonymized, "FirstName", AnonymizeFreeText);
+            anonymized = RedactXmlTagValueWithRegex(anonymized, "LastName", AnonymizeFreeText);
+            anonymized = RedactXmlTagValueWithRegex(anonymized, "Address1", AnonymizeFreeText);
+            anonymized = RedactXmlTagValueWithRegex(anonymized, "Address2", AnonymizeFreeText);
+            anonymized = RedactXmlTagValueWithRegex(anonymized, "Town", AnonymizeFreeText);
+            anonymized = RedactXmlTagValueWithRegex(anonymized, "Postcode", AnonymizePostcode);
+            anonymized = RedactXmlTagValueWithRegex(anonymized, "County", AnonymizeFreeText);
+            anonymized = RedactXmlTagValueWithRegex(anonymized, "TelMain", AnonymizePhone);
+            anonymized = RedactXmlTagValueWithRegex(anonymized, "TelAlt", AnonymizePhone);
+            anonymized = RedactXmlTagValueWithRegex(anonymized, "TelMobile", AnonymizePhone);
+            anonymized = RedactXmlTagValueWithRegex(anonymized, "GuestId", AnonymizeIdentifier);
+            anonymized = RedactXmlTagValueWithRegex(anonymized, "ClientRef", AnonymizeIdentifier);
+            anonymized = RedactXmlTagValueWithRegex(anonymized, "address", AnonymizeFreeText);
+            anonymized = RedactXmlTagValueWithRegex(anonymized, "town", AnonymizeFreeText);
+            anonymized = RedactXmlTagValueWithRegex(anonymized, "postcode", AnonymizePostcode);
+
+            return anonymized;
         }
+    }
+
+    private static string RedactXmlTagValueWithRegex(string xml, string tagName, Func<string, string> redactor)
+    {
+        var pattern = $"(<{tagName}\\b[^>]*>)([\\s\\S]*?)(</{tagName}>)";
+        return Regex.Replace(
+            xml,
+            pattern,
+            match => $"{match.Groups[1].Value}{redactor(match.Groups[2].Value)}{match.Groups[3].Value}",
+            RegexOptions.IgnoreCase);
+    }
+
+    private static string AnonymizeXmlValue(string elementName, string value)
+    {
+        return elementName.ToLowerInvariant() switch
+        {
+            "email" => AnonymizeEmail(value),
+            "firstname" => AnonymizeFreeText(value),
+            "lastname" => AnonymizeFreeText(value),
+            "address1" => AnonymizeFreeText(value),
+            "address2" => AnonymizeFreeText(value),
+            "town" => AnonymizeFreeText(value),
+            "postcode" => AnonymizePostcode(value),
+            "county" => AnonymizeFreeText(value),
+            "telmain" => AnonymizePhone(value),
+            "telalt" => AnonymizePhone(value),
+            "telmobile" => AnonymizePhone(value),
+            "guestid" => AnonymizeIdentifier(value),
+            "clientref" => AnonymizeIdentifier(value),
+            "address" => AnonymizeFreeText(value),
+            _ => AnonymizeFreeText(value)
+        };
     }
 
     private static string AnonymizeEmail(string? email)
@@ -290,6 +362,68 @@ public sealed class DataExportDemoViewModelFactory : IDataExportDemoViewModelFac
 
         var maskedDomain = domain.Length <= 1 ? "*" : $"{domain[0]}***";
         return $"{maskedLocal}@{maskedDomain}";
+    }
+
+    private static string AnonymizePersonName(string? firstName, string? lastName)
+    {
+        var maskedFirst = AnonymizeFreeText(firstName);
+        var maskedLast = AnonymizeFreeText(lastName);
+        return $"{maskedFirst} {maskedLast}".Trim();
+    }
+
+    private static string AnonymizeIdentifier(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = value.Trim();
+        if (trimmed.Length <= 2)
+        {
+            return "**";
+        }
+
+        return $"{trimmed[0]}***{trimmed[^1]}";
+    }
+
+    private static string AnonymizePostcode(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var compact = value.Trim().Replace(" ", string.Empty, StringComparison.Ordinal);
+        if (compact.Length <= 3)
+        {
+            return "***";
+        }
+
+        return $"{compact[..2]}***{compact[^1]}";
+    }
+
+    private static string AnonymizePhone(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = value.Trim();
+        var suffix = trimmed.Length >= 2 ? trimmed[^2..] : "**";
+        return $"***{suffix}";
+    }
+
+    private static string AnonymizeFreeText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = value.Trim();
+        return trimmed.Length <= 1 ? "*" : $"{trimmed[0]}***";
     }
 
     private static string FormatXml(string xml)

@@ -33,7 +33,19 @@
                 <li>Accept query parameters for booking search mode and filters.</li>
                 <li>Call Data Export endpoints with the <code>SC-TOKEN</code> header.</li>
                 <li>Deserialize XML payloads into typed models.</li>
-                <li>Project to safe view models with anonymized email values for demo display.</li>
+                <li>Project to safe view models with anonymized PII values for demo display.</li>
+            </ol>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Use cases</h2>
+            <p>Typical operational and support workflows this integration enables:</p>
+            <ol>
+                <li>Booking lookup by identifier for support teams investigating a specific guest booking.</li>
+                <li>Daily delta checks using <code>LastUpdate</code> to feed downstream BI/reporting pipelines.</li>
+                <li>Date-window export for finance or operations reconciliation around month-end.</li>
+                <li>Property feed validation to confirm expected metadata, location values, and sync coverage.</li>
+                <li>Demo/sandbox diagnostics where XML is visible but personally identifiable data is always masked.</li>
             </ol>
         </section>
 
@@ -120,11 +132,12 @@ return new DataExportBookingsResponseViewModel
 
         <section class="sv-doc">
             <h2>Anonymization for demo safety</h2>
-            <p>For demo output, anonymize guest emails in both:</p>
+            <p>For demo output, anonymize all sensitive guest/property fields in both:</p>
             <ol>
                 <li>View model fields (for rendered booking cards)</li>
                 <li>Raw XML output panel (for diagnostics)</li>
             </ol>
+            <p>Current masking covers values such as names, addresses, postcode, phone numbers, guest identifiers, client references, and email addresses.</p>
             <p>Example masking pattern:</p>
             <pre class="sc-pre">private static string AnonymizeEmail(string? email)
 {
@@ -151,14 +164,15 @@ dotnet run --project supercontrol-listing-site-demo.csproj</pre>
             <p>Verification checklist:</p>
             <ol>
                 <li>Try each search mode and confirm required fields are enforced by behavior.</li>
-                <li>Confirm bookings render with masked email values only.</li>
-                <li>Confirm raw XML panel also masks email addresses.</li>
+                <li>Confirm bookings render with masked guest name, masked guest email, and masked client reference values.</li>
+                <li>Confirm raw XML panel masks guest and property PII fields.</li>
                 <li>Check properties endpoint renders latitude/longitude and identifiers.</li>
             </ol>
         </section>
 
         <section class="sv-doc">
             <p><a class="text-link" href="/supercontrol-data-export">Open Data Export demo</a></p>
+            <p><a class="text-link" href="/supercontrol-data-export-tests">Open Data Export test guide</a></p>
             <p><a class="text-link" href="/supercontrol-demo">Open diagnostics page</a></p>
         </section>
     </div>

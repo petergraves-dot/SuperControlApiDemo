@@ -1,0 +1,77 @@
+@{
+    ViewData["Title"] = "SuperControl Data Export Test Guide";
+}
+
+<section class="sv-wrap">
+    <div class="ambient-orb orb-a"></div>
+    <div class="ambient-orb orb-b"></div>
+
+    <div class="sv-shell sv-doc-page">
+        <header class="sv-hero">
+            <p class="kicker">Quality Guide</p>
+            <nav class="sv-breadcrumb" aria-label="Breadcrumb">
+                <ol>
+                    <li><a asp-controller="Site" asp-action="Index">Home</a></li>
+                    <li><a asp-controller="SuperControlDataExportDemo" asp-action="Index">Data Export Demo</a></li>
+                    <li><a asp-controller="Site" asp-action="SuperControlDataExportTutorial">Tutorial</a></li>
+                    <li><span aria-current="page">Tests</span></li>
+                </ol>
+            </nav>
+            <h1>SuperControl Data Export Test Guide</h1>
+            <p class="lead">A practical overview of test coverage for Data Export behavior, XML mapping, routing, and PII redaction safety.</p>
+        </header>
+
+        <section class="sv-doc">
+            <h2>Test suites and projects</h2>
+            <ul>
+                <li><code>tests/supercontrol-listing-site-demo.Tests/DataExportDemoTests.cs</code> for the public demo app.</li>
+                <li><code>../tests/petergraves.Tests/DataExportDemoTests.cs</code> in the parent repo for the full app variant.</li>
+            </ul>
+            <p>Both suites use MSTest and run under .NET 10.</p>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Current use-case coverage</h2>
+            <ol>
+                <li>API string-error response handling (for example invalid token XML payloads).</li>
+                <li>Bookings XML happy path mapping into strongly typed view models.</li>
+                <li>Search mode guard behavior when required identifiers are missing.</li>
+                <li>Properties XML mapping and safe display values.</li>
+                <li>PII masking behavior in view model fields and rendered raw XML output.</li>
+                <li>Route smoke tests for documentation/tutorial endpoints.</li>
+            </ol>
+        </section>
+
+        <section class="sv-doc">
+            <h2>PII safety assertions</h2>
+            <p>The tests assert that raw XML shown in diagnostics does not expose original personal data.</p>
+            <ul>
+                <li>Unmasked source values are absent (names, addresses, postcode, phone, guest id, email).</li>
+                <li>Masked values are present (for example <code>j***@@e***.com</code>, <code>DG***E</code>, and masked identifiers).</li>
+                <li>Properties feed PII fields are also validated as masked.</li>
+            </ul>
+        </section>
+
+        <section class="sv-doc">
+            <h2>How to run</h2>
+            <pre class="sc-pre">dotnet test tests/supercontrol-listing-site-demo.Tests/supercontrol-listing-site-demo.Tests.csproj</pre>
+            <p>From the parent workspace, this project is typically run via:</p>
+            <pre class="sc-pre">dotnet test supercontrol-listing-site-demo-public/tests/supercontrol-listing-site-demo.Tests/supercontrol-listing-site-demo.Tests.csproj</pre>
+        </section>
+
+        <section class="sv-doc">
+            <h2>When adding new scenarios</h2>
+            <ol>
+                <li>Add the scenario to the request/response fixture XML in unit tests.</li>
+                <li>Assert both mapped view model outputs and <code>RawXml</code> diagnostics output.</li>
+                <li>Prefer explicit contains/not-contains assertions for sensitive fields.</li>
+                <li>If a new endpoint route is added, include at least one route smoke test.</li>
+            </ol>
+        </section>
+
+        <section class="sv-doc">
+            <p><a class="text-link" href="/supercontrol-data-export-tutorial">Back to Data Export tutorial</a></p>
+            <p><a class="text-link" href="/supercontrol-data-export">Open Data Export demo</a></p>
+        </section>
+    </div>
+</section>
