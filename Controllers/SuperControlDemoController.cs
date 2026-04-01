@@ -37,10 +37,35 @@ public sealed class SuperControlDemoController : Controller
     }
 
     [HttpPost("refresh-cache")]
-    public async Task<IActionResult> RefreshCache(string cacheRefreshCadence, CancellationToken cancellationToken)
+    [Consumes("application/x-www-form-urlencoded", "multipart/form-data")]
+    public Task<IActionResult> RefreshCache(
+        [FromForm] SuperControlDemoRefreshCacheRequest request,
+        CancellationToken cancellationToken)
+    {
+        return RefreshCacheCoreAsync(request.CacheRefreshCadence, cancellationToken);
+    }
+
+    [HttpPost("refresh-cache")]
+    [Consumes("application/json")]
+    [IgnoreAntiforgeryToken]
+    [ServiceFilter(typeof(JsonBodyAntiforgeryFilter))]
+    public Task<IActionResult> RefreshCacheJson(
+        [FromBody] SuperControlDemoRefreshCacheRequest request,
+        CancellationToken cancellationToken)
+    {
+        return RefreshCacheCoreAsync(request.CacheRefreshCadence, cancellationToken);
+    }
+
+    private async Task<IActionResult> RefreshCacheCoreAsync(
+        string? cacheRefreshCadence,
+        CancellationToken cancellationToken)
     {
         var model = CreateModel();
-        model.CacheRefreshCadence = cacheRefreshCadence;
+        if (!string.IsNullOrWhiteSpace(cacheRefreshCadence))
+        {
+            model.CacheRefreshCadence = cacheRefreshCadence;
+        }
+
         await model.RefreshCacheAsync(cancellationToken);
         return View("Index", model);
     }
