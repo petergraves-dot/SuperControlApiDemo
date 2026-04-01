@@ -18,10 +18,22 @@ public sealed class SiteController : Controller
         return View("~/Views/SuperControlListingSiteTutorial/Index.cshtml");
     }
 
+    [HttpGet("/supercontrol-listing-site-tests")]
+    public IActionResult SuperControlListingSiteTests()
+    {
+        return View("~/Views/SuperControlListingSiteTests/Index.cshtml");
+    }
+
     [HttpGet("/supercontrol-data-export-tutorial")]
     public IActionResult SuperControlDataExportTutorial()
     {
         return View("~/Views/SuperControlDataExportTutorial/Index.cshtml");
+    }
+
+    [HttpGet("/supercontrol-data-export-tests")]
+    public IActionResult SuperControlDataExportTests()
+    {
+        return View("~/Views/SuperControlDataExportTests/Index.cshtml");
     }
 
     [HttpGet("/Error")]

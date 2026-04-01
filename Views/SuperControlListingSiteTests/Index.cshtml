@@ -1,0 +1,62 @@
+@{
+    ViewData["Title"] = "SuperControl Listing Site Test Guide";
+}
+
+<section class="sv-wrap">
+    <div class="ambient-orb orb-a"></div>
+    <div class="ambient-orb orb-b"></div>
+
+    <div class="sv-shell sv-doc-page">
+        <header class="sv-hero">
+            <p class="kicker">Quality Guide</p>
+            <nav class="sv-breadcrumb" aria-label="Breadcrumb">
+                <ol>
+                    <li><a asp-controller="Site" asp-action="Index">Home</a></li>
+                    <li><a asp-controller="SuperControlListingSiteDemo" asp-action="Index">Listing Demo</a></li>
+                    <li><a asp-controller="Site" asp-action="SuperControlListingSiteTutorial">Tutorial</a></li>
+                    <li><span aria-current="page">Tests</span></li>
+                </ol>
+            </nav>
+            <h1>SuperControl Listing Site Test Guide</h1>
+            <p class="lead">A concise map of automated tests for listing flows, cache refresh behavior, and route-level smoke checks.</p>
+        </header>
+
+        <section class="sv-doc">
+            <h2>Test projects</h2>
+            <ul>
+                <li><code>tests/supercontrol-listing-site-demo.Tests/CacheRefreshEndpointTests.cs</code> for cache refresh endpoint behavior.</li>
+                <li><code>tests/supercontrol-listing-site-demo.Tests/DataExportDemoTests.cs</code> for route smoke tests (including tutorial pages).</li>
+            </ul>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Current coverage by use case</h2>
+            <ol>
+                <li>Reject invalid cache refresh cadence values.</li>
+                <li>Return a valid summary for allowed cache refresh cadence requests.</li>
+                <li>Enforce method constraints for refresh endpoint (POST only).</li>
+                <li>Enforce rate limiting on repeated refresh posts.</li>
+                <li>Verify tutorial and tests documentation routes return HTTP 200.</li>
+            </ol>
+        </section>
+
+        <section class="sv-doc">
+            <h2>How to run</h2>
+            <pre class="sc-pre">dotnet test tests/supercontrol-listing-site-demo.Tests/supercontrol-listing-site-demo.Tests.csproj</pre>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Suggested additions</h2>
+            <ol>
+                <li>Listing search filtering behavior for where/check-in/check-out/guests combinations.</li>
+                <li>Property detail fallback behavior when some payloads are unavailable.</li>
+                <li>Cache hit/miss/stale fallback behavior for listing payload delta cache.</li>
+            </ol>
+        </section>
+
+        <section class="sv-doc">
+            <p><a class="text-link" href="/supercontrol-listing-site-tutorial">Back to Listing Site tutorial</a></p>
+            <p><a class="text-link" href="/supercontrol-listing-site-demo">Open Listing Site demo</a></p>
+        </section>
+    </div>
+</section>
