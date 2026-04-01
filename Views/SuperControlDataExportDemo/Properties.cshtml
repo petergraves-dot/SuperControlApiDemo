@@ -1,0 +1,80 @@
+@model petergraves.ViewModels.SuperControlDataExportDemo.DataExportPropertiesResponseViewModel
+@{
+    ViewData["Title"] = "Data Export Properties";
+}
+
+<section class="sv-wrap">
+    <div class="ambient-orb orb-a"></div>
+    <div class="ambient-orb orb-b"></div>
+
+    <div class="sv-shell">
+        <header class="sv-hero">
+            <p class="kicker">Data Export Demo</p>
+            <nav class="sv-breadcrumb" aria-label="Breadcrumb">
+                <ol>
+                    <li><a asp-controller="Site" asp-action="Index">Home</a></li>
+                    <li><a asp-controller="SuperControlDemo" asp-action="Index">SuperControl API Demo</a></li>
+                    <li><a asp-controller="SuperControlDataExportDemo" asp-action="Index">Data Export Demo</a></li>
+                    <li><span aria-current="page">Properties</span></li>
+                </ol>
+            </nav>
+            <h1>Data Export Properties</h1>
+            <p class="lead">Loads the XML Data Export properties feed and maps core location fields.</p>
+        </header>
+
+        @if (!string.IsNullOrWhiteSpace(Model.Error))
+        {
+            <article class="sv-alert">
+                <strong>Data load issue:</strong> @Model.Error
+            </article>
+        }
+
+        @if (Model.Loaded)
+        {
+            <section class="sv-stats">
+                <article>
+                    <span>Properties returned</span>
+                    <strong>@Model.Properties.Count</strong>
+                </article>
+            </section>
+
+            @if (Model.Properties.Count == 0)
+            {
+                <article class="sv-empty">
+                    <h2>No properties returned</h2>
+                    <p>The endpoint responded, but no records were found.</p>
+                </article>
+            }
+            else
+            {
+                <section class="sv-grid">
+                    @foreach (var property in Model.Properties)
+                    {
+                        <article class="sv-card">
+                            <div class="sv-card-body">
+                                <div class="sv-title-row">
+                                    <h3>@property.PropertyName</h3>
+                                    <span class="sv-pill">@property.SupercontrolId</span>
+                                </div>
+                                <p class="sv-location">@property.Address, @property.Town, @property.Postcode, @property.Country</p>
+                                <p class="sv-sub">Arrive: @property.Arrive | Depart: @property.Depart</p>
+                                <div class="sv-tags">
+                                    <span>Lat: @property.Latitude</span>
+                                    <span>Lng: @property.Longitude</span>
+                                </div>
+                            </div>
+                        </article>
+                    }
+                </section>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(Model.RawXml))
+            {
+                <section class="sv-doc">
+                    <h2>Raw XML</h2>
+                    <pre class="sc-pre">@Model.RawXml</pre>
+                </section>
+            }
+        }
+    </div>
+</section>

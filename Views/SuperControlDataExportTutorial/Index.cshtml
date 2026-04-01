@@ -1,0 +1,165 @@
+@{
+    ViewData["Title"] = "SuperControl Data Export API Tutorial";
+}
+
+<section class="sv-wrap">
+    <div class="ambient-orb orb-a"></div>
+    <div class="ambient-orb orb-b"></div>
+
+    <div class="sv-shell sv-doc-page">
+        <header class="sv-hero">
+            <p class="kicker">Implementation Guide</p>
+            <nav class="sv-breadcrumb" aria-label="Breadcrumb">
+                <ol>
+                    <li><a asp-controller="Site" asp-action="Index">Home</a></li>
+                    <li><a asp-controller="SuperControlDemo" asp-action="Index">SuperControl API Demo</a></li>
+                    <li><a asp-controller="SuperControlDataExportDemo" asp-action="Index">Data Export Demo</a></li>
+                    <li><span aria-current="page">Tutorial</span></li>
+                </ol>
+            </nav>
+            <h1>SuperControl Data Export API Tutorial</h1>
+            <p class="lead">Build an MVC diagnostics and exploration flow for the Data Export XML endpoints, including safe anonymization for demo output.</p>
+        </header>
+
+        <section class="sv-doc">
+            <h2>What you are building</h2>
+            <p>Two routes drive the tutorial implementation:</p>
+            <ul>
+                <li><code>/supercontrol-data-export</code> (bookings query form + parsed results)</li>
+                <li><code>/supercontrol-data-export/properties</code> (properties feed diagnostics)</li>
+            </ul>
+            <p>Runtime flow:</p>
+            <ol>
+                <li>Accept query parameters for booking search mode and filters.</li>
+                <li>Call Data Export endpoints with the <code>SC-TOKEN</code> header.</li>
+                <li>Deserialize XML payloads into typed models.</li>
+                <li>Project to safe view models with anonymized email values for demo display.</li>
+            </ol>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Prerequisites</h2>
+            <ul>
+                <li>.NET 10 SDK</li>
+                <li>SuperControl API token with Data Export access</li>
+                <li>Configured base URL (normally <code>https://api.supercontrol.co.uk/v3/</code>)</li>
+            </ul>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Environment configuration</h2>
+            <p>Set the SuperControl values in <code>appsettings.json</code> (or environment variables):</p>
+            <pre class="sc-pre">"SuperControl": {
+  "ApiKey": "your-supercontrol-sc-token",
+  "BaseUrl": "https://api.supercontrol.co.uk/v3/"
+}</pre>
+            <p>For this tutorial, <code>ApiKey</code> is required. The Data Export demo does not require <code>AccountId</code>.</p>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Dependency injection and routing</h2>
+            <p>Register the factory and expose a dedicated controller route:</p>
+            <pre class="sc-pre">builder.Services.AddScoped&lt;IDataExportDemoViewModelFactory, DataExportDemoViewModelFactory&gt;();
+
+[Route("supercontrol-data-export")]
+public sealed class SuperControlDataExportDemoController : Controller
+{
+    [HttpGet("")]
+    public async Task&lt;IActionResult&gt; Index([FromQuery] DataExportBookingsRequestViewModel request, CancellationToken ct)
+
+    [HttpGet("properties")]
+    public async Task&lt;IActionResult&gt; Properties(CancellationToken ct)
+}</pre>
+            <p>Add a tutorial route in <code>SiteController</code>:</p>
+            <pre class="sc-pre">[HttpGet("/supercontrol-data-export-tutorial")]
+public IActionResult SuperControlDataExportTutorial()
+{
+    return View("~/Views/SuperControlDataExportTutorial/Index.cshtml");
+}</pre>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Endpoints used</h2>
+            <ul>
+                <li><code>GET /DataExport/Bookings?...query...</code></li>
+                <li><code>GET /DataExport/Properties</code></li>
+            </ul>
+            <p>The API returns XML payloads, so the client sends <code>Accept: application/xml</code> for these calls.</p>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Request model and search modes</h2>
+            <p><code>DataExportBookingsRequestViewModel</code> supports three modes:</p>
+            <ol>
+                <li><code>single</code>: one of <code>BookingId</code>, <code>OwnerBookingId</code>, or <code>OwnerRef</code></li>
+                <li><code>dateRange</code>: requires both <code>StartDate</code> and <code>EndDate</code></li>
+                <li><code>lastUpdate</code>: requires <code>LastUpdate</code></li>
+            </ol>
+            <p>Optional filters include <code>BookingStatus</code>, <code>Limit</code>, and <code>Page</code>.</p>
+        </section>
+
+        <section class="sv-doc">
+            <h2>XML parsing and mapping</h2>
+            <p>Use <code>XmlSerializer</code> with dedicated model classes:</p>
+            <ul>
+                <li><code>DataExportBookingsResponse</code>, <code>DataExportBooking</code>, <code>DataExportGuest</code></li>
+                <li><code>DataExportPropertiesResponse</code>, <code>DataExportPropertyItem</code></li>
+            </ul>
+            <p>Factory mapping pattern:</p>
+            <pre class="sc-pre">var parsed = DeserializeXml&lt;DataExportBookingsResponse&gt;(body);
+
+return new DataExportBookingsResponseViewModel
+{
+    Loaded = true,
+    CurrentPage = parsed.CurrentPage,
+    TotalPages = parsed.TotalPages,
+    Bookings = parsed.Bookings.Select(MapBooking).ToList(),
+    RawXml = FormatXml(anonymizedBody)
+};</pre>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Anonymization for demo safety</h2>
+            <p>For demo output, anonymize guest emails in both:</p>
+            <ol>
+                <li>View model fields (for rendered booking cards)</li>
+                <li>Raw XML output panel (for diagnostics)</li>
+            </ol>
+            <p>Example masking pattern:</p>
+            <pre class="sc-pre">private static string AnonymizeEmail(string? email)
+{
+    if (string.IsNullOrWhiteSpace(email)) return string.Empty;
+    // john.smith@@example.com -> j***@@e***.com
+    ...
+}</pre>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Error behavior</h2>
+            <p>The API can return XML string messages (for example invalid token) while still returning HTTP 200. Detect this by checking for a <code>&lt;string&gt;</code> root and surface a friendly error in the view model.</p>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Run and verify</h2>
+            <pre class="sc-pre">dotnet restore supercontrol-listing-site-demo-public.sln
+dotnet run --project supercontrol-listing-site-demo.csproj</pre>
+            <p>Open:</p>
+            <ul>
+                <li><a class="text-link" href="/supercontrol-data-export">/supercontrol-data-export</a></li>
+                <li><a class="text-link" href="/supercontrol-data-export/properties">/supercontrol-data-export/properties</a></li>
+            </ul>
+            <p>Verification checklist:</p>
+            <ol>
+                <li>Try each search mode and confirm required fields are enforced by behavior.</li>
+                <li>Confirm bookings render with masked email values only.</li>
+                <li>Confirm raw XML panel also masks email addresses.</li>
+                <li>Check properties endpoint renders latitude/longitude and identifiers.</li>
+            </ol>
+        </section>
+
+        <section class="sv-doc">
+            <p><a class="text-link" href="/supercontrol-data-export">Open Data Export demo</a></p>
+            <p><a class="text-link" href="/supercontrol-demo">Open diagnostics page</a></p>
+        </section>
+    </div>
+</section>

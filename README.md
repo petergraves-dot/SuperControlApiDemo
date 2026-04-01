@@ -5,10 +5,13 @@ Standalone ASP.NET Core project focused on SuperControl integration demo files.
 ## Included routes
 
 - `/supercontrol-demo` - API diagnostics and payload inspector
-- `/internal/supercontrol/cache-refresh?cadence=accounts|content-config|prices-availability|all` - cache pre-warm endpoint for scheduled jobs
+- `POST /internal/supercontrol/cache-refresh?cadence=accounts|content-config|prices-availability|all` - cache pre-warm endpoint for scheduled jobs (rate-limited)
 - `/supercontrol-listing-site-demo` - listing site style search/cards demo
 - `/supercontrol-listing-site-demo/property/{propertyId}` - property detail page
 - `/supercontrol-listing-site-tutorial` - implementation tutorial page
+- `/supercontrol-data-export` - Data Export bookings XML demo
+- `/supercontrol-data-export/properties` - Data Export properties XML demo
+- `/supercontrol-data-export-tutorial` - Data Export implementation tutorial page
 
 The `/supercontrol-demo` page includes a cache cadence selector and `Refresh Cache Cadence` action to run and inspect cache refresh runs directly in the UI.
 
@@ -16,6 +19,7 @@ The `/supercontrol-demo` page includes a cache cadence selector and `Refresh Cac
 
 - API diagnostics guide: `SuperControl-Demo.md`
 - Listing implementation guide: `SuperControl-Listing-Site-Tutorial.md`
+- Data Export implementation guide: `Views/SuperControlDataExportTutorial/Index.cshtml`
 
 ## Setup
 
@@ -24,8 +28,8 @@ The `/supercontrol-demo` page includes a cache cadence selector and `Refresh Cac
 3. Run:
 
 ```bash
-dotnet restore
-dotnet run
+dotnet restore supercontrol-listing-site-demo-public.sln
+dotnet run --project supercontrol-listing-site-demo.csproj
 ```
 
 ## Example SuperControl settings

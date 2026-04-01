@@ -391,6 +391,16 @@ internal sealed class StubSuperControlClient : ISuperControlClient
     {
         throw new NotSupportedException();
     }
+
+    public Task<SuperControlApiResponse> GetDataExportBookingsAsync(string queryString, CancellationToken cancellationToken = default)
+    {
+        throw new NotSupportedException();
+    }
+
+    public Task<SuperControlApiResponse> GetDataExportPropertiesAsync(CancellationToken cancellationToken = default)
+    {
+        throw new NotSupportedException();
+    }
 }
 
 internal sealed class StubSuperControlResponseCache : ISuperControlResponseCache

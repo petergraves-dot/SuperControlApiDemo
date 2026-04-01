@@ -40,7 +40,8 @@ Used by listing/property pages and widgets:
 Run locally:
 
 ```bash
-dotnet run
+dotnet restore supercontrol-listing-site-demo-public.sln
+dotnet run --project supercontrol-listing-site-demo.csproj
 ```
 
 Open: `https://localhost:{port}/supercontrol-demo` (use the HTTPS URL shown in terminal).
@@ -58,13 +59,14 @@ Environment variables can still override appsettings (for example `SuperControl_
 
 ## Cache refresh endpoint and demo UI
 
-- Internal endpoint: `GET` or `POST /internal/supercontrol/cache-refresh?cadence={value}`
+- Internal endpoint: `POST /internal/supercontrol/cache-refresh?cadence={value}`
 - Cadence values:
   - `accounts` -> refreshes `properties/index` with 12 hour TTL
   - `content-config` -> refreshes `contentindex` + `configurationindex` with 6 hour TTL
   - `prices-availability` -> refreshes `pricesindex` + `availabilityindex` with 30 minute TTL
   - `all` -> runs all cadence groups in one pass
 - Response returns JSON summary with request counts, successes/failures, cache hits/misses, stale fallback count, and per-index breakdown.
+- Endpoint is rate-limited to 6 requests per minute; excess requests return HTTP 429.
 
 The `/supercontrol-demo` page now includes a cache cadence selector and `Refresh Cache Cadence` button that runs the same refresh logic and shows the JSON summary output directly in the UI.
 
@@ -72,13 +74,13 @@ The `/supercontrol-demo` page now includes a cache cadence selector and `Refresh
 
 ```bash
 # accounts every 12 hours
-curl -fsS "https://your-host/internal/supercontrol/cache-refresh?cadence=accounts"
+curl -fsS -X POST "https://your-host/internal/supercontrol/cache-refresh?cadence=accounts"
 
 # content/configuration every 6 hours
-curl -fsS "https://your-host/internal/supercontrol/cache-refresh?cadence=content-config"
+curl -fsS -X POST "https://your-host/internal/supercontrol/cache-refresh?cadence=content-config"
 
 # prices/availability every 30 minutes
-curl -fsS "https://your-host/internal/supercontrol/cache-refresh?cadence=prices-availability"
+curl -fsS -X POST "https://your-host/internal/supercontrol/cache-refresh?cadence=prices-availability"
 ```
 
 ## Verification checklist

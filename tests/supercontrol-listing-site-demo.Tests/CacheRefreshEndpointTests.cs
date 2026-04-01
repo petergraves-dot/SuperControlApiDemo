@@ -17,7 +17,8 @@ public class CacheRefreshEndpointTests
         using var factory = CreateFactory(CreateAccountsIndexCachedResponse());
         using var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/internal/supercontrol/cache-refresh?cadence=not-a-cadence");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/internal/supercontrol/cache-refresh?cadence=not-a-cadence");
+        var response = await client.SendAsync(request);
         var json = await response.Content.ReadAsStringAsync();
 
         Assert.AreEqual(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
@@ -30,7 +31,8 @@ public class CacheRefreshEndpointTests
         using var factory = CreateFactory(CreateAccountsIndexCachedResponse());
         using var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/internal/supercontrol/cache-refresh?cadence=accounts");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/internal/supercontrol/cache-refresh?cadence=accounts");
+        var response = await client.SendAsync(request);
         var json = await response.Content.ReadAsStringAsync();
 
         Assert.AreEqual(System.Net.HttpStatusCode.OK, response.StatusCode);
@@ -40,6 +42,37 @@ public class CacheRefreshEndpointTests
         Assert.AreEqual(1, root.GetProperty("accountCount").GetInt32());
         Assert.AreEqual(1, root.GetProperty("requests").GetInt32());
         Assert.AreEqual(1, root.GetProperty("successes").GetInt32());
+    }
+
+    [TestMethod]
+    public async Task CacheRefreshEndpoint_WhenGetUsed_ReturnsMethodNotAllowed()
+    {
+        using var factory = CreateFactory(CreateAccountsIndexCachedResponse());
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/internal/supercontrol/cache-refresh?cadence=accounts");
+
+        Assert.AreEqual(System.Net.HttpStatusCode.MethodNotAllowed, response.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task CacheRefreshEndpoint_WhenRapidPostsExceedLimit_ReturnsTooManyRequests()
+    {
+        using var factory = CreateFactory(CreateAccountsIndexCachedResponse());
+        using var client = factory.CreateClient();
+
+        const int permitLimit = 6;
+        for (var i = 0; i < permitLimit; i++)
+        {
+            using var allowedRequest = new HttpRequestMessage(HttpMethod.Post, "/internal/supercontrol/cache-refresh?cadence=accounts");
+            var allowedResponse = await client.SendAsync(allowedRequest);
+            Assert.AreEqual(System.Net.HttpStatusCode.OK, allowedResponse.StatusCode);
+        }
+
+        using var blockedRequest = new HttpRequestMessage(HttpMethod.Post, "/internal/supercontrol/cache-refresh?cadence=accounts");
+        var blockedResponse = await client.SendAsync(blockedRequest);
+
+        Assert.AreEqual((System.Net.HttpStatusCode)429, blockedResponse.StatusCode);
     }
 
     private static WebApplicationFactory<Program> CreateFactory(CachedSuperControlResponse accountsIndexResponse)
@@ -129,6 +162,16 @@ public class CacheRefreshEndpointTests
         }
 
         public Task<SuperControlApiResponse> GetByUrlAsync(string url, CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<SuperControlApiResponse> GetDataExportBookingsAsync(string queryString, CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<SuperControlApiResponse> GetDataExportPropertiesAsync(CancellationToken cancellationToken = default)
         {
             throw new NotSupportedException();
         }

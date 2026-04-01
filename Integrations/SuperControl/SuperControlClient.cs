@@ -39,10 +39,34 @@ public sealed class SuperControlClient : ISuperControlClient
         return GetAsync(url, cancellationToken);
     }
 
+    public Task<SuperControlApiResponse> GetDataExportBookingsAsync(string queryString, CancellationToken cancellationToken = default)
+    {
+        var path = string.IsNullOrEmpty(queryString)
+            ? "DataExport/Bookings"
+            : $"DataExport/Bookings?{queryString}";
+        return GetXmlAsync(path, cancellationToken);
+    }
+
+    public Task<SuperControlApiResponse> GetDataExportPropertiesAsync(CancellationToken cancellationToken = default)
+    {
+        return GetXmlAsync("DataExport/Properties", cancellationToken);
+    }
+
     private async Task<SuperControlApiResponse> GetAsync(string path, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, path);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.TryAddWithoutValidation("SC-TOKEN", _options.ApiKey);
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        return new SuperControlApiResponse(response.IsSuccessStatusCode, (int)response.StatusCode, body);
+    }
+
+    private async Task<SuperControlApiResponse> GetXmlAsync(string path, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/xml"));
         request.Headers.TryAddWithoutValidation("SC-TOKEN", _options.ApiKey);
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);

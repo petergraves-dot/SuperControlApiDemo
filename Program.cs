@@ -1,5 +1,7 @@
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.RateLimiting;
+using petergraves.Features.SuperControlDataExportDemo;
 using petergraves.Features.SuperControlListingSiteDemo;
 using petergraves.Features.SuperControlProperty;
 using petergraves.Integrations.SuperControl;
@@ -7,7 +9,10 @@ using petergraves.Integrations.SuperControl;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllersWithViews(options =>
+{
+    options.Filters.Add(new Microsoft.AspNetCore.Mvc.AutoValidateAntiforgeryTokenAttribute());
+});
 builder.Services
     .AddOptions<SuperControlOptions>()
     .Bind(builder.Configuration.GetSection(SuperControlOptions.SectionName))
@@ -34,6 +39,17 @@ builder.Services.AddHttpClient<ISuperControlClient, SuperControlClient>((service
 builder.Services.AddScoped<ISuperControlListingSiteService, SuperControlListingSiteService>();
 builder.Services.AddScoped<ISuperControlListingSiteDemoViewModelFactory, SuperControlListingSiteDemoViewModelFactory>();
 builder.Services.AddScoped<ISuperControlPropertyViewModelFactory, SuperControlPropertyViewModelFactory>();
+builder.Services.AddScoped<IDataExportDemoViewModelFactory, DataExportDemoViewModelFactory>();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter("internal-refresh", limiterOptions =>
+    {
+        limiterOptions.PermitLimit = 6;
+        limiterOptions.Window = TimeSpan.FromMinutes(1);
+        limiterOptions.QueueLimit = 0;
+    });
+});
 
 var app = builder.Build();
 var cookieAudit = new List<object>();
@@ -93,6 +109,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseRouting();
+app.UseRateLimiter();
 
 app.Use(async (context, next) =>
 {
@@ -116,7 +133,9 @@ app.MapGet("/sitemap.xml", (HttpRequest request) =>
     {
         (Path: "/", ChangeFreq: "weekly", Priority: "1.0"),
         (Path: "/supercontrol-demo", ChangeFreq: "daily", Priority: "0.9"),
-        (Path: "/supercontrol-listing-site-tutorial", ChangeFreq: "weekly", Priority: "0.7")
+        (Path: "/supercontrol-listing-site-tutorial", ChangeFreq: "weekly", Priority: "0.7"),
+        (Path: "/supercontrol-data-export", ChangeFreq: "weekly", Priority: "0.7"),
+        (Path: "/supercontrol-data-export-tutorial", ChangeFreq: "weekly", Priority: "0.6")
     };
 
     var xml = new StringBuilder();
@@ -146,7 +165,7 @@ app.MapGet("/robots.txt", (HttpRequest request) =>
     return Results.Text(robots, "text/plain", Encoding.UTF8);
 });
 
-app.MapMethods("/internal/supercontrol/cache-refresh", ["GET", "POST"], async (
+app.MapPost("/internal/supercontrol/cache-refresh", async (
     string? cadence,
     ISuperControlClient client,
     ISuperControlResponseCache responseCache,
@@ -231,7 +250,8 @@ app.MapMethods("/internal/supercontrol/cache-refresh", ["GET", "POST"], async (
 
     summary.CompletedAtUtc = DateTime.UtcNow;
     return Results.Json(summary);
-});
+})
+.RequireRateLimiting("internal-refresh");
 
 if (app.Environment.IsDevelopment())
 {
@@ -255,7 +275,8 @@ static bool ShouldNoIndex(PathString path)
         return false;
     }
 
-    return path.Value!.StartsWith("/supercontrol-listing-site-demo", StringComparison.OrdinalIgnoreCase);
+    return path.Value!.StartsWith("/supercontrol-listing-site-demo", StringComparison.OrdinalIgnoreCase)
+        || path.Value.StartsWith("/supercontrol-data-export", StringComparison.OrdinalIgnoreCase);
 }
 
 static CadencePlan? ResolveCadence(string? cadence)
