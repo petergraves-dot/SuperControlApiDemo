@@ -1,4 +1,7 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Net;
+using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
@@ -75,6 +78,51 @@ public class CacheRefreshEndpointTests
         Assert.AreEqual((System.Net.HttpStatusCode)429, blockedResponse.StatusCode);
     }
 
+    [TestMethod]
+    public async Task DemoRefreshCacheEndpoint_WhenPostedAsJsonWithAntiforgeryToken_ReturnsOk()
+    {
+        using var factory = CreateFactory(CreateAccountsIndexCachedResponse());
+        using var client = factory.CreateClient();
+
+        var antiforgeryToken = await GetAntiforgeryTokenAsync(client);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/supercontrol-demo/refresh-cache")
+        {
+            Content = JsonContent.Create(new
+            {
+                cacheRefreshCadence = "prices-availability",
+                __RequestVerificationToken = antiforgeryToken
+            })
+        };
+
+        var response = await client.SendAsync(request);
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.AreEqual(System.Net.HttpStatusCode.OK, response.StatusCode);
+        StringAssert.Contains(html, "Cadence prices-availability:");
+    }
+
+    [TestMethod]
+    public async Task DemoRefreshCacheEndpoint_WhenPostedAsJsonWithoutAntiforgeryToken_ReturnsBadRequest()
+    {
+        using var factory = CreateFactory(CreateAccountsIndexCachedResponse());
+        using var client = factory.CreateClient();
+
+        await client.GetAsync("/supercontrol-demo");
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/supercontrol-demo/refresh-cache")
+        {
+            Content = JsonContent.Create(new
+            {
+                cacheRefreshCadence = "prices-availability"
+            })
+        };
+
+        var response = await client.SendAsync(request);
+
+        Assert.AreEqual(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(CachedSuperControlResponse accountsIndexResponse)
     {
         return new WebApplicationFactory<Program>()
@@ -119,6 +167,23 @@ public class CacheRefreshEndpointTests
             StaleFallback: false);
     }
 
+    private static async Task<string> GetAntiforgeryTokenAsync(HttpClient client)
+    {
+        var response = await client.GetAsync("/supercontrol-demo");
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+
+        var match = Regex.Match(
+            html,
+            "name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"",
+            RegexOptions.CultureInvariant);
+
+        Assert.IsTrue(match.Success, "Antiforgery token field was not rendered on /supercontrol-demo.");
+
+        return WebUtility.HtmlDecode(match.Groups[1].Value);
+    }
+
     private sealed class TestSuperControlResponseCache : ISuperControlResponseCache
     {
         private readonly CachedSuperControlResponse _accountsIndexResponse;
@@ -138,6 +203,17 @@ public class CacheRefreshEndpointTests
             if (cacheKey == "properties/index")
             {
                 return Task.FromResult(_accountsIndexResponse);
+            }
+
+            if (cacheKey.StartsWith("properties/pricesindex/", StringComparison.Ordinal)
+                || cacheKey.StartsWith("properties/availabilityindex/", StringComparison.Ordinal)
+                || cacheKey.StartsWith("properties/contentindex/", StringComparison.Ordinal)
+                || cacheKey.StartsWith("properties/configurationindex/", StringComparison.Ordinal))
+            {
+                return Task.FromResult(new CachedSuperControlResponse(
+                    new SuperControlApiResponse(true, 200, "{}"),
+                    CacheHit: false,
+                    StaleFallback: false));
             }
 
             throw new InvalidOperationException($"Unexpected cache key in test: {cacheKey}");

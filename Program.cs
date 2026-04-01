@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.RateLimiting;
+using petergraves.Features.SuperControlDemo;
 using petergraves.Features.SuperControlDataExportDemo;
 using petergraves.Features.SuperControlListingSiteDemo;
 using petergraves.Features.SuperControlProperty;
@@ -13,6 +14,10 @@ builder.Services.AddControllersWithViews(options =>
 {
     options.Filters.Add(new Microsoft.AspNetCore.Mvc.AutoValidateAntiforgeryTokenAttribute());
 });
+builder.Services.AddAntiforgery(options =>
+{
+    options.HeaderName = "RequestVerificationToken";
+});
 builder.Services
     .AddOptions<SuperControlOptions>()
     .Bind(builder.Configuration.GetSection(SuperControlOptions.SectionName))
@@ -23,6 +28,7 @@ builder.Services
     .ValidateOnStart();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ISuperControlResponseCache, SuperControlResponseCache>();
+builder.Services.AddScoped<JsonBodyAntiforgeryFilter>();
 builder.Services.AddHttpClient<ISuperControlClient, SuperControlClient>((serviceProvider, httpClient) =>
 {
     var options = serviceProvider
