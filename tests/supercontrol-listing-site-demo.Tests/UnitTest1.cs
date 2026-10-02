@@ -263,7 +263,29 @@ public class SuperControlListingSiteDemoViewModelFactoryTests
         Assert.AreEqual("SuperControl__AccountId is not configured.", response.Error);
     }
 
-    [DataTestMethod]
+    [TestMethod]
+    public async Task BuildAsync_WhenServiceReturnsError_DoesNotMarkResultsAsLoaded()
+    {
+        var service = new RecordingListingSiteService
+        {
+            SnapshotToReturn = new SuperControlListingSiteSnapshot
+            {
+                Errors = ["Accounts index could not be loaded."]
+            }
+        };
+        var factory = CreateFactory(
+            new SuperControlOptions { ApiKey = "test-key", AccountId = 42 },
+            service);
+
+        var response = await factory.BuildAsync(
+            new SuperControlListingSiteDemoRequestViewModel(),
+            CancellationToken.None);
+
+        Assert.IsFalse(response.Loaded);
+        Assert.AreEqual("Accounts index could not be loaded.", response.Error);
+    }
+
+    [TestMethod]
     [DataRow(0, 1)]
     [DataRow(31, 30)]
     public async Task BuildAsync_ClampsGuestsIntoRangeAndCallsService(int requestedGuests, int expectedGuests)
@@ -321,7 +343,7 @@ public class SuperControlPropertyViewModelFactoryTests
         Assert.AreEqual("Invalid property id.", response.Error);
     }
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(0, 1)]
     [DataRow(31, 30)]
     public async Task BuildAsync_ClampsGuestsAndCallsService(int requestedGuests, int expectedGuests)
@@ -339,6 +361,36 @@ public class SuperControlPropertyViewModelFactoryTests
         Assert.AreEqual(42, service.LastAccountId);
         Assert.AreEqual(1001, service.LastPropertyId);
         Assert.AreEqual(expectedGuests, service.LastGuests);
+    }
+
+    [TestMethod]
+    public async Task BuildAsync_MapsSelectedStayPricing()
+    {
+        var service = new RecordingListingSiteService
+        {
+            PropertyResultToReturn = new SuperControlPropertyDetailResult
+            {
+                Property = new SuperControlPropertyDetail
+                {
+                    PropertyId = 1001,
+                    Name = "Demo cottage",
+                    SelectedStayPrice = 420m,
+                    SelectedStayNights = 3,
+                    Currency = "Gbp"
+                }
+            }
+        };
+        var factory = CreateFactory(
+            new SuperControlOptions { ApiKey = "test-key", AccountId = 42 },
+            service);
+
+        var response = await factory.BuildAsync(
+            new SuperControlPropertyRequestViewModel { PropertyId = 1001 },
+            CancellationToken.None);
+
+        Assert.IsNotNull(response.Property);
+        Assert.AreEqual(420m, response.Property.SelectedStayPrice);
+        Assert.AreEqual(3, response.Property.SelectedStayNights);
     }
 
     [TestMethod]
@@ -436,6 +488,10 @@ internal sealed class RecordingListingSiteService : ISuperControlListingSiteServ
 
     public int? LastGuests { get; private set; }
 
+    public SuperControlListingSiteSnapshot SnapshotToReturn { get; init; } = new();
+
+    public SuperControlPropertyDetailResult PropertyResultToReturn { get; init; } = new();
+
     public Task<SuperControlListingSiteSnapshot> BuildSnapshotAsync(
         int accountId,
         string? query,
@@ -446,7 +502,7 @@ internal sealed class RecordingListingSiteService : ISuperControlListingSiteServ
     {
         LastAccountId = accountId;
         LastGuests = guests;
-        return Task.FromResult(new SuperControlListingSiteSnapshot());
+        return Task.FromResult(SnapshotToReturn);
     }
 
     public Task<SuperControlPropertyDetailResult> GetPropertyDetailAsync(
@@ -460,7 +516,7 @@ internal sealed class RecordingListingSiteService : ISuperControlListingSiteServ
         LastAccountId = accountId;
         LastPropertyId = propertyId;
         LastGuests = guests;
-        return Task.FromResult(new SuperControlPropertyDetailResult());
+        return Task.FromResult(PropertyResultToReturn);
     }
 }
 

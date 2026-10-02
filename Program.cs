@@ -1,6 +1,4 @@
 using System.Text;
-using System.Text.Json;
-using Microsoft.AspNetCore.RateLimiting;
 using petergraves.Features.SuperControlDemo;
 using petergraves.Features.SuperControlDataExportDemo;
 using petergraves.Features.SuperControlListingSiteDemo;
@@ -8,6 +6,18 @@ using petergraves.Features.SuperControlProperty;
 using petergraves.Integrations.SuperControl;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Optional developer-specific settings. This file is git-ignored and is not published.
+builder.Configuration.AddJsonFile(
+    "appsettings.Local.json",
+    optional: true,
+    reloadOnChange: true)
+    .AddEnvironmentVariables();
+
+if (args.Length > 0)
+{
+    builder.Configuration.AddCommandLine(args);
+}
 
 // Add services to the container.
 builder.Services.AddControllersWithViews(options =>
@@ -23,8 +33,9 @@ builder.Services
     .Bind(builder.Configuration.GetSection(SuperControlOptions.SectionName))
     .ValidateDataAnnotations()
     .Validate(
-        options => Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out _),
-        "SuperControl:BaseUrl must be an absolute URL.")
+        options => Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out var baseUri)
+            && baseUri.Scheme == Uri.UriSchemeHttps,
+        "SuperControl:BaseUrl must be an absolute HTTPS URL.")
     .ValidateOnStart();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ISuperControlResponseCache, SuperControlResponseCache>();
@@ -41,26 +52,21 @@ builder.Services.AddHttpClient<ISuperControlClient, SuperControlClient>((service
     }
 
     httpClient.Timeout = TimeSpan.FromSeconds(30);
+})
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    // Do not forward SC-TOKEN through an HTTP redirect to another origin.
+    AllowAutoRedirect = false
 });
 builder.Services.AddScoped<ISuperControlListingSiteService, SuperControlListingSiteService>();
 builder.Services.AddScoped<ISuperControlListingSiteDemoViewModelFactory, SuperControlListingSiteDemoViewModelFactory>();
 builder.Services.AddScoped<ISuperControlPropertyViewModelFactory, SuperControlPropertyViewModelFactory>();
 builder.Services.AddScoped<IDataExportDemoViewModelFactory, DataExportDemoViewModelFactory>();
-builder.Services.AddRateLimiter(options =>
-{
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddFixedWindowLimiter("internal-refresh", limiterOptions =>
-    {
-        limiterOptions.PermitLimit = 6;
-        limiterOptions.Window = TimeSpan.FromMinutes(1);
-        limiterOptions.QueueLimit = 0;
-    });
-});
 
 var app = builder.Build();
 var cookieAudit = new List<object>();
 const int cookieAuditLimit = 200;
-const string contentSecurityPolicy = "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' https://cdn.jsdelivr.net https://secure.supercontrol.co.uk; style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' https: data:; connect-src 'self' https://api.supercontrol.co.uk https://secure.supercontrol.co.uk; frame-src 'self' https://secure.supercontrol.co.uk";
+const string contentSecurityPolicy = "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' https://secure.supercontrol.co.uk; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self'; connect-src 'self' https://api.supercontrol.co.uk https://secure.supercontrol.co.uk; frame-src 'self' https://secure.supercontrol.co.uk";
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
@@ -115,7 +121,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseRouting();
-app.UseRateLimiter();
 
 app.Use(async (context, next) =>
 {
@@ -171,94 +176,6 @@ app.MapGet("/robots.txt", (HttpRequest request) =>
     return Results.Text(robots, "text/plain", Encoding.UTF8);
 });
 
-app.MapPost("/internal/supercontrol/cache-refresh", async (
-    string? cadence,
-    ISuperControlClient client,
-    ISuperControlResponseCache responseCache,
-    CancellationToken cancellationToken) =>
-{
-    var cadencePlan = ResolveCadence(cadence);
-    if (cadencePlan is null)
-    {
-        return Results.BadRequest(new
-        {
-            error = "Invalid cadence. Use accounts, content-config, prices-availability, or all."
-        });
-    }
-
-    var summary = new CacheRefreshSummary(cadencePlan.Name);
-
-    var accountsIndex = await responseCache.GetOrFetchAsync(
-        scope: "index",
-        cacheKey: "properties/index",
-        ttl: TimeSpan.FromHours(12),
-        fetch: ct => client.GetAccountsIndexAsync(ct),
-        cancellationToken: cancellationToken);
-
-    AddStats(summary, "accounts-index", accountsIndex);
-
-    if (!accountsIndex.Response.IsSuccess)
-    {
-        return Results.Json(summary, statusCode: StatusCodes.Status502BadGateway);
-    }
-
-    var parsedAccounts = TryDeserialize<AccountsIndexResponse>(accountsIndex.Response.Body);
-    var accounts = parsedAccounts?.Accounts ?? [];
-    summary.AccountCount = accounts.Count;
-
-    if (cadencePlan.IncludeContentConfiguration)
-    {
-        foreach (var account in accounts)
-        {
-            await RefreshIndexAsync(
-                summary,
-                responseCache,
-                client,
-                "content-index",
-                $"properties/contentindex/{account.AccountId}",
-                TimeSpan.FromHours(6),
-                cancellationToken);
-
-            await RefreshIndexAsync(
-                summary,
-                responseCache,
-                client,
-                "configuration-index",
-                $"properties/configurationindex/{account.AccountId}",
-                TimeSpan.FromHours(6),
-                cancellationToken);
-        }
-    }
-
-    if (cadencePlan.IncludePricesAvailability)
-    {
-        foreach (var account in accounts)
-        {
-            await RefreshIndexAsync(
-                summary,
-                responseCache,
-                client,
-                "prices-index",
-                $"properties/pricesindex/{account.AccountId}",
-                TimeSpan.FromMinutes(30),
-                cancellationToken);
-
-            await RefreshIndexAsync(
-                summary,
-                responseCache,
-                client,
-                "availability-index",
-                $"properties/availabilityindex/{account.AccountId}",
-                TimeSpan.FromMinutes(30),
-                cancellationToken);
-        }
-    }
-
-    summary.CompletedAtUtc = DateTime.UtcNow;
-    return Results.Json(summary);
-})
-.RequireRateLimiting("internal-refresh");
-
 if (app.Environment.IsDevelopment())
 {
     app.MapGet("/_cookie-audit", () =>
@@ -284,142 +201,6 @@ static bool ShouldNoIndex(PathString path)
     return path.Value!.StartsWith("/supercontrol-listing-site-demo", StringComparison.OrdinalIgnoreCase)
         || path.Value.StartsWith("/supercontrol-data-export", StringComparison.OrdinalIgnoreCase);
 }
-
-static CadencePlan? ResolveCadence(string? cadence)
-{
-    var value = cadence?.Trim().ToLowerInvariant() ?? "all";
-    return value switch
-    {
-        "accounts" => new CadencePlan("accounts", false, false),
-        "content-config" => new CadencePlan("content-config", true, false),
-        "prices-availability" => new CadencePlan("prices-availability", false, true),
-        "all" => new CadencePlan("all", true, true),
-        _ => null
-    };
-}
-
-static T? TryDeserialize<T>(string json)
-{
-    try
-    {
-        return JsonSerializer.Deserialize<T>(json, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        });
-    }
-    catch
-    {
-        return default;
-    }
-}
-
-static async Task RefreshIndexAsync(
-    CacheRefreshSummary summary,
-    ISuperControlResponseCache responseCache,
-    ISuperControlClient client,
-    string indexName,
-    string cacheKey,
-    TimeSpan ttl,
-    CancellationToken cancellationToken)
-{
-    var result = await responseCache.GetOrFetchAsync(
-        scope: "index",
-        cacheKey: cacheKey,
-        ttl: ttl,
-        fetch: ct => client.GetByRelativeUrlAsync(cacheKey, ct),
-        cancellationToken: cancellationToken);
-
-    AddStats(summary, indexName, result);
-}
-
-static void AddStats(
-    CacheRefreshSummary summary,
-    string indexName,
-    CachedSuperControlResponse response)
-{
-    summary.Requests++;
-    if (response.Response.IsSuccess)
-    {
-        summary.Successes++;
-    }
-    else
-    {
-        summary.Failures++;
-    }
-
-    if (response.CacheHit)
-    {
-        summary.CacheHits++;
-    }
-    else
-    {
-        summary.CacheMisses++;
-    }
-
-    if (response.StaleFallback)
-    {
-        summary.StaleFallbacks++;
-    }
-
-    summary.IndexBreakdown[indexName] = summary.IndexBreakdown.TryGetValue(indexName, out var existing)
-        ? existing with
-        {
-            Requests = existing.Requests + 1,
-            Successes = existing.Successes + (response.Response.IsSuccess ? 1 : 0),
-            Failures = existing.Failures + (response.Response.IsSuccess ? 0 : 1),
-            CacheHits = existing.CacheHits + (response.CacheHit ? 1 : 0),
-            CacheMisses = existing.CacheMisses + (response.CacheHit ? 0 : 1),
-            StaleFallbacks = existing.StaleFallbacks + (response.StaleFallback ? 1 : 0)
-        }
-        : new CacheRefreshIndexStats(
-            Requests: 1,
-            Successes: response.Response.IsSuccess ? 1 : 0,
-            Failures: response.Response.IsSuccess ? 0 : 1,
-            CacheHits: response.CacheHit ? 1 : 0,
-            CacheMisses: response.CacheHit ? 0 : 1,
-            StaleFallbacks: response.StaleFallback ? 1 : 0);
-}
-
-file sealed record CadencePlan(string Name, bool IncludeContentConfiguration, bool IncludePricesAvailability);
-
-file sealed class CacheRefreshSummary
-{
-    public CacheRefreshSummary(string cadence)
-    {
-        Cadence = cadence;
-        StartedAtUtc = DateTime.UtcNow;
-    }
-
-    public string Cadence { get; }
-
-    public DateTime StartedAtUtc { get; }
-
-    public DateTime? CompletedAtUtc { get; set; }
-
-    public int AccountCount { get; set; }
-
-    public int Requests { get; set; }
-
-    public int Successes { get; set; }
-
-    public int Failures { get; set; }
-
-    public int CacheHits { get; set; }
-
-    public int CacheMisses { get; set; }
-
-    public int StaleFallbacks { get; set; }
-
-    public Dictionary<string, CacheRefreshIndexStats> IndexBreakdown { get; } = new(StringComparer.OrdinalIgnoreCase);
-}
-
-file sealed record CacheRefreshIndexStats(
-    int Requests,
-    int Successes,
-    int Failures,
-    int CacheHits,
-    int CacheMisses,
-    int StaleFallbacks);
 
 public partial class Program
 {

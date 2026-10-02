@@ -20,6 +20,10 @@ public sealed class SuperControlPropertyDetailViewModel
 
     public decimal? FromPrice { get; init; }
 
+    public decimal? SelectedStayPrice { get; init; }
+
+    public int? SelectedStayNights { get; init; }
+
     public string? Currency { get; init; }
 
     public bool IsAvailableForSelectedDates { get; init; }

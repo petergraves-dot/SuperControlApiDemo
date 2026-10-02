@@ -85,6 +85,8 @@ public sealed class SuperControlPropertyViewModelFactory : ISuperControlProperty
             Amenities = property.Amenities,
             Images = property.Images,
             FromPrice = property.FromPrice,
+            SelectedStayPrice = property.SelectedStayPrice,
+            SelectedStayNights = property.SelectedStayNights,
             Currency = property.Currency,
             IsAvailableForSelectedDates = property.IsAvailableForSelectedDates,
             NextKnownAvailableDateUtc = property.NextKnownAvailableDateUtc,

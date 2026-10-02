@@ -43,7 +43,7 @@
 
         @if (!string.IsNullOrWhiteSpace(Model.Error))
         {
-            <article class="sv-alert">
+            <article class="sv-alert" role="alert">
                 <strong>Data load issue:</strong> @Model.Error
             </article>
         }

@@ -26,7 +26,7 @@ public sealed class SuperControlClient : ISuperControlClient
 
     public Task<SuperControlApiResponse> GetByRelativeUrlAsync(string relativeUrl, CancellationToken cancellationToken = default)
     {
-        if (Uri.TryCreate(relativeUrl, UriKind.Absolute, out _))
+        if (!IsAllowedRequestUrl(relativeUrl, requireRelative: true))
         {
             throw new ArgumentException("Expected a relative URL.", nameof(relativeUrl));
         }
@@ -36,6 +36,14 @@ public sealed class SuperControlClient : ISuperControlClient
 
     public Task<SuperControlApiResponse> GetByUrlAsync(string url, CancellationToken cancellationToken = default)
     {
+        if (!IsAllowedRequestUrl(url, requireRelative: false))
+        {
+            return Task.FromResult(new SuperControlApiResponse(
+                IsSuccess: false,
+                StatusCode: 400,
+                Body: "{\"error\":\"Rejected a URL outside the configured SuperControl API origin.\"}"));
+        }
+
         return GetAsync(url, cancellationToken);
     }
 
@@ -72,5 +80,29 @@ public sealed class SuperControlClient : ISuperControlClient
         using var response = await _httpClient.SendAsync(request, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         return new SuperControlApiResponse(response.IsSuccessStatusCode, (int)response.StatusCode, body);
+    }
+
+    private bool IsAllowedRequestUrl(string url, bool requireRelative)
+    {
+        if (string.IsNullOrWhiteSpace(url) || _httpClient.BaseAddress is not Uri baseAddress)
+        {
+            return false;
+        }
+
+        var isAbsolute = Uri.TryCreate(url, UriKind.Absolute, out _);
+        if (requireRelative && isAbsolute)
+        {
+            return false;
+        }
+
+        if (!Uri.TryCreate(baseAddress, url, out var resolved))
+        {
+            return false;
+        }
+
+        return resolved.Scheme == Uri.UriSchemeHttps
+            && string.Equals(resolved.Scheme, baseAddress.Scheme, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(resolved.Host, baseAddress.Host, StringComparison.OrdinalIgnoreCase)
+            && resolved.Port == baseAddress.Port;
     }
 }

@@ -1,6 +1,11 @@
 @model petergraves.ViewModels.SuperControlProperty.SuperControlPropertyResponseViewModel
 @{
     ViewData["Title"] = "Property Details";
+    var invalidDateRange = Model.Request.CheckIn.HasValue
+        && Model.Request.CheckOut.HasValue
+        && Model.Request.CheckOut <= Model.Request.CheckIn;
+    var checkOutMinimum = Model.Request.CheckIn?.AddDays(1).ToString("yyyy-MM-dd")
+        ?? DateOnly.FromDateTime(DateTime.Today).AddDays(1).ToString("yyyy-MM-dd");
 }
 
 <section class="sv-wrap">
@@ -39,28 +44,32 @@
             </header>
 
             <section class="svp-grid">
-                <article class="sv-card svp-main">
-                    @if (Model.Property.Images.Count > 0)
-                    {
-                        <div class="svp-gallery">
-                            <img class="svp-hero-image" src="@Model.Property.Images[0]" alt="@Model.Property.Name" loading="lazy" />
-                            <div class="svp-gallery-rail">
-                                @foreach (var image in Model.Property.Images.Skip(1).Take(4))
-                                {
-                                    <img src="@image" alt="@Model.Property.Name" loading="lazy" />
-                                }
-                            </div>
-                        </div>
-                    }
-                    <div class="sv-card-body">
-                        @if (!string.IsNullOrWhiteSpace(Model.Property.SubCaption))
+                <div class="svp-main-column">
+                    <article class="sv-card svp-main svp-gallery-card">
+                        @if (Model.Property.Images.Count > 0)
                         {
-                            <p class="sv-sub">@Model.Property.SubCaption</p>
+                            <div class="svp-gallery">
+                                <img class="svp-hero-image" src="@Model.Property.Images[0]" alt="@Model.Property.Name" loading="lazy" />
+                                <div class="svp-gallery-rail">
+                                    @foreach (var image in Model.Property.Images.Skip(1).Take(4))
+                                    {
+                                        <img src="@image" alt="@Model.Property.Name" loading="lazy" />
+                                    }
+                                </div>
+                            </div>
                         }
-                        <h2>About this property</h2>
-                        <div class="sv-desc sv-desc-full">@Html.Raw(Model.Property.DescriptionHtml)</div>
-                    </div>
-                </article>
+                    </article>
+                    <article class="sv-card svp-main svp-about-card">
+                        <div class="sv-card-body">
+                            @if (!string.IsNullOrWhiteSpace(Model.Property.SubCaption))
+                            {
+                                <p class="sv-sub">@Model.Property.SubCaption</p>
+                            }
+                            <h2>About this property</h2>
+                            <div class="sv-desc sv-desc-full">@Html.Raw(Model.Property.DescriptionHtml)</div>
+                        </div>
+                    </article>
+                </div>
 
                 <aside class="sv-card sv-detail-side svp-side">
                     <div class="svp-side-head">
@@ -75,36 +84,61 @@
                         }
                     </div>
 
-                    <p class="svp-back-row">
-                        <a class="svp-back-button"
-                           asp-controller="SuperControlListingSiteDemo"
-                           asp-action="Index"
-                           asp-route-where="@Model.Request.Where"
-                           asp-route-checkIn="@(Model.Request.CheckIn?.ToString("yyyy-MM-dd"))"
-                           asp-route-checkOut="@(Model.Request.CheckOut?.ToString("yyyy-MM-dd"))"
-                           asp-route-guests="@Model.Request.Guests">Back to results</a>
-                    </p>
-
-                    <div class="svp-panel">
-                        <h3>Stay details</h3>
-                        <dl class="svp-kv">
-                            <dt>Check-in</dt>
-                            <dd>@(Model.Request.CheckIn?.ToString("yyyy-MM-dd") ?? "Not selected")</dd>
-                            <dt>Check-out</dt>
-                            <dd>@(Model.Request.CheckOut?.ToString("yyyy-MM-dd") ?? "Not selected")</dd>
-                            <dt>Guests</dt>
-                            <dd>@Model.Request.Guests</dd>
-                        </dl>
-                    </div>
+                    <form method="get"
+                          asp-controller="SuperControlProperty"
+                          asp-action="Index"
+                          asp-route-propertyId="@Model.Property.PropertyId"
+                          class="svp-booking-form">
+                        @if (!string.IsNullOrWhiteSpace(Model.Request.Where))
+                        {
+                            <input type="hidden" name="where" value="@Model.Request.Where" />
+                        }
+                        <div class="svp-date-grid">
+                            <label>
+                                <span>Check-in</span>
+                                <input type="date"
+                                       name="checkIn"
+                                       min="@DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd")"
+                                       value="@Model.Request.CheckIn?.ToString("yyyy-MM-dd")" />
+                            </label>
+                            <label>
+                                <span>Check-out</span>
+                                <input type="date"
+                                       name="checkOut"
+                                       min="@checkOutMinimum"
+                                       value="@Model.Request.CheckOut?.ToString("yyyy-MM-dd")" />
+                            </label>
+                        </div>
+                        <label>
+                            <span>Guests</span>
+                            <input type="number"
+                                   name="guests"
+                                   min="1"
+                                   max="@(Model.Property.MaximumOccupancyGuests ?? 30)"
+                                   value="@Model.Request.Guests" />
+                        </label>
+                        @if (invalidDateRange)
+                        {
+                            <p class="svp-form-error" role="alert">Check-out must be after check-in.</p>
+                        }
+                        <button type="submit">Check availability</button>
+                    </form>
 
                     <div class="svp-panel">
                         <h3>Pricing and availability</h3>
                         <dl class="svp-kv">
+                            @if (Model.Property.SelectedStayPrice.HasValue && Model.Property.SelectedStayNights.HasValue)
+                            {
+                                <dt>Stay total</dt>
+                                <dd>@($"{Model.Property.SelectedStayPrice.Value:0.##} {Model.Property.Currency?.ToUpperInvariant()}")</dd>
+                                <dt>Stay length</dt>
+                                <dd>@Model.Property.SelectedStayNights nights</dd>
+                            }
                             <dt>From</dt>
                             <dd>
                                 @if (Model.Property.FromPrice.HasValue)
                                 {
-                                    @Model.Property.FromPrice.Value.ToString("0.##") @Model.Property.Currency
+                                    @($"{Model.Property.FromPrice.Value:0.##} {Model.Property.Currency?.ToUpperInvariant()}")
                                 }
                                 else
                                 {
@@ -139,12 +173,22 @@
                             <p class="sv-sub">Calendar embed key is not configured.</p>
                         }
                     </div>
+
+                    <p class="svp-back-row">
+                        <a class="svp-back-button"
+                           asp-controller="SuperControlListingSiteDemo"
+                           asp-action="Index"
+                           asp-route-where="@Model.Request.Where"
+                           asp-route-checkIn="@(Model.Request.CheckIn?.ToString("yyyy-MM-dd"))"
+                           asp-route-checkOut="@(Model.Request.CheckOut?.ToString("yyyy-MM-dd"))"
+                           asp-route-guests="@Model.Request.Guests">← Back to results</a>
+                    </p>
                 </aside>
             </section>
 
             @if (Model.Property.Amenities.Count > 0)
             {
-                <section class="sv-card">
+                <section class="sv-card svp-section">
                     <h2>Amenities</h2>
                     <div class="sv-tags">
                         @foreach (var amenity in Model.Property.Amenities)
@@ -167,7 +211,7 @@
                 || Model.Property.MaximumOccupancyGuests.HasValue
                 || Model.Property.AcceptedCardPaymentForms.Count > 0)
             {
-                <section class="sv-card">
+                <section class="sv-card svp-section">
                     <h2>Booking and house rules</h2>
                     <div class="svp-config-grid">
                         <div class="svp-panel">
@@ -258,15 +302,16 @@
 
             @if (Model.Property.SampleRates.Count > 0)
             {
-                <section class="sv-card">
-                    <h2>Sample rates</h2>
+                <section class="sv-card svp-section">
+                    <h2>Example available rates</h2>
+                    <p class="sv-sub">A sample of the lowest prices currently returned for each arrival date and stay length.</p>
                     <div class="sv-table-wrap">
                         <table class="sv-table">
                             <thead>
                                 <tr>
                                     <th>Arrival date</th>
-                                    <th>Best LOS</th>
-                                    <th>Lowest available LOS price</th>
+                                    <th>Stay length</th>
+                                    <th>Lowest available price</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -275,7 +320,7 @@
                                     <tr>
                                         <td>@row.ArrivalDate.ToString("yyyy-MM-dd")</td>
                                         <td>@row.Nights nights</td>
-                                        <td>@row.MinPrice.ToString("0.##") @Model.Property.Currency</td>
+                                        <td>@($"{row.MinPrice:0.##} {Model.Property.Currency?.ToUpperInvariant()}")</td>
                                     </tr>
                                 }
                             </tbody>
