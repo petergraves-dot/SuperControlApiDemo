@@ -5,3 +5,7 @@ obj/
 publish/
 .DS_Store
 .supercontrol-cache/
+appsettings.Local.json
+.env
+.env.*
+deploy.sh

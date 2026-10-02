@@ -17,25 +17,14 @@
 
   <ItemGroup>
     <None Update="web.config" CopyToPublishDirectory="PreserveNewest" />
-    <None Update="package.json" CopyToPublishDirectory="Never" />
-    <None Update="package-lock.json" CopyToPublishDirectory="Never" />
     <None Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
-    <Content Update="package.json" CopyToPublishDirectory="Never" />
-    <Content Update="package-lock.json" CopyToPublishDirectory="Never" />
+    <None Update="appsettings.Local.json" CopyToPublishDirectory="Never" />
     <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
-    <Content Update="wwwroot/css/**" CopyToPublishDirectory="Never" />
-    <Content Update="wwwroot/js/**" CopyToPublishDirectory="Never" />
+    <Content Update="appsettings.Local.json" CopyToPublishDirectory="Never" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="HtmlSanitizer" Version="9.0.892" />
+    <PackageReference Include="HtmlSanitizer" Version="9.2.1039" />
   </ItemGroup>
-
-  <Target Name="BuildFrontendAssets"
-          BeforeTargets="Build"
-          Condition="'$(Configuration)' == 'Release' and Exists('package.json')">
-    <Exec Command="npm ci" WorkingDirectory="$(MSBuildProjectDirectory)" />
-    <Exec Command="npm run build:assets" WorkingDirectory="$(MSBuildProjectDirectory)" />
-  </Target>
 
 </Project>

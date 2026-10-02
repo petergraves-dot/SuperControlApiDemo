@@ -57,31 +57,16 @@ Environment variables can still override appsettings (for example `SuperControl_
   - Content/configuration indexes: every 6 hours
   - Prices/availability indexes: every 30 minutes
 
-## Cache refresh endpoint and demo UI
+## Cache refresh demo UI
 
-- Internal endpoint: `POST /internal/supercontrol/cache-refresh?cadence={value}`
 - Cadence values:
   - `accounts` -> refreshes `properties/index` with 12 hour TTL
   - `content-config` -> refreshes `contentindex` + `configurationindex` with 6 hour TTL
   - `prices-availability` -> refreshes `pricesindex` + `availabilityindex` with 30 minute TTL
   - `all` -> runs all cadence groups in one pass
-- Response returns JSON summary with request counts, successes/failures, cache hits/misses, stale fallback count, and per-index breakdown.
-- Endpoint is rate-limited to 6 requests per minute; excess requests return HTTP 429.
+- The response view shows a JSON summary with request counts, successes/failures, cache hits/misses, stale fallback count, and per-index breakdown.
 
-The `/supercontrol-demo` page now includes a cache cadence selector and `Refresh Cache Cadence` button that runs the same refresh logic and shows the JSON summary output directly in the UI.
-
-### Scheduler examples
-
-```bash
-# accounts every 12 hours
-curl -fsS -X POST "https://your-host/internal/supercontrol/cache-refresh?cadence=accounts"
-
-# content/configuration every 6 hours
-curl -fsS -X POST "https://your-host/internal/supercontrol/cache-refresh?cadence=content-config"
-
-# prices/availability every 30 minutes
-curl -fsS -X POST "https://your-host/internal/supercontrol/cache-refresh?cadence=prices-availability"
-```
+The `/supercontrol-demo` page includes a cache cadence selector and `Refresh Cache Cadence` button. The action is protected by anti-forgery validation. The standalone demo intentionally does not expose a public scheduler endpoint; production applications should implement scheduled refreshes behind their own authentication and job infrastructure.
 
 ## Verification checklist
 

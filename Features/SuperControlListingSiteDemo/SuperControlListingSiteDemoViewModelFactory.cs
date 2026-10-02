@@ -56,7 +56,7 @@ public sealed class SuperControlListingSiteDemoViewModelFactory : ISuperControlL
         return new SuperControlListingSiteDemoResponseViewModel
         {
             Request = normalizedRequest,
-            Loaded = true,
+            Loaded = error is null,
             AccountId = accountId,
             Error = error,
             Stats = new SuperControlListingSiteDemoStatsViewModel

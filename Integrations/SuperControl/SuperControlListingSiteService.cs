@@ -338,7 +338,7 @@ public sealed class SuperControlListingSiteService : ISuperControlListingSiteSer
                 payloadUrl: pricesIndexEntry.ListingUrl,
                 lastUpdatedUtc: pricesIndexEntry.LastUpdated.UtcDateTime,
                 cancellationToken);
-            ApplyPrices(detail, pricesResult.Payload);
+            ApplyPrices(detail, pricesResult.Payload, checkIn, checkOut);
         }
 
         var availabilityIndexEntry = availabilityIndexTask.Result?.Properties.FirstOrDefault(property => property.PropertyId == propertyId);
@@ -737,12 +737,23 @@ public sealed class SuperControlListingSiteService : ISuperControlListingSiteSer
         };
     }
 
-    private static void ApplyPrices(SuperControlPropertyDetail detail, PricesListingResponse? pricesListing)
+    private static void ApplyPrices(
+        SuperControlPropertyDetail detail,
+        PricesListingResponse? pricesListing,
+        DateOnly? checkIn,
+        DateOnly? checkOut)
     {
         var priceLos = pricesListing?.Prices?.PriceLos;
         detail.FromPrice = ExtractFromPrice(priceLos);
         detail.Currency = pricesListing?.Prices?.Currency;
         detail.SampleRates = BuildSampleRates(priceLos).ToList();
+
+        var selectedStay = FindSelectedStayPrice(priceLos, checkIn, checkOut);
+        if (selectedStay is not null)
+        {
+            detail.SelectedStayPrice = selectedStay.Value.Price;
+            detail.SelectedStayNights = selectedStay.Value.Nights;
+        }
     }
 
     private static IEnumerable<SampleRateRow> BuildSampleRates(List<string>? priceLos)
@@ -870,15 +881,30 @@ public sealed class SuperControlListingSiteService : ISuperControlListingSiteSer
         DateOnly? checkIn,
         DateOnly? checkOut)
     {
-        if (priceLos is null || checkIn is null || checkOut is null || checkOut <= checkIn)
+        var selectedStay = FindSelectedStayPrice(priceLos, checkIn, checkOut);
+        if (selectedStay is null)
         {
             return;
+        }
+
+        card.SelectedStayNights = selectedStay.Value.Nights;
+        card.SelectedStayPrice = selectedStay.Value.Price;
+    }
+
+    private static (decimal Price, int Nights)? FindSelectedStayPrice(
+        List<string>? priceLos,
+        DateOnly? checkIn,
+        DateOnly? checkOut)
+    {
+        if (priceLos is null || checkIn is null || checkOut is null || checkOut <= checkIn)
+        {
+            return null;
         }
 
         var nights = checkOut.Value.DayNumber - checkIn.Value.DayNumber;
         if (nights <= 0)
         {
-            return;
+            return null;
         }
 
         var targetDate = checkIn.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -906,10 +932,10 @@ public sealed class SuperControlListingSiteService : ISuperControlListingSiteSer
                 continue;
             }
 
-            card.SelectedStayNights = nights;
-            card.SelectedStayPrice = stayPrice;
-            return;
+            return (stayPrice, nights);
         }
+
+        return null;
     }
 }
 
@@ -1029,6 +1055,10 @@ public sealed class SuperControlPropertyDetail
     public IReadOnlyList<string> Images { get; init; } = [];
 
     public decimal? FromPrice { get; set; }
+
+    public decimal? SelectedStayPrice { get; set; }
+
+    public int? SelectedStayNights { get; set; }
 
     public string? Currency { get; set; }
 

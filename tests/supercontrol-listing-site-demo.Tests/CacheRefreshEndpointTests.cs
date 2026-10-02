@@ -15,67 +15,15 @@ namespace supercontrol_listing_site_demo.Tests;
 public class CacheRefreshEndpointTests
 {
     [TestMethod]
-    public async Task CacheRefreshEndpoint_WhenCadenceInvalid_ReturnsBadRequest()
+    public async Task InternalCacheRefreshEndpoint_IsNotExposed()
     {
         using var factory = CreateFactory(CreateAccountsIndexCachedResponse());
         using var client = factory.CreateClient();
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/internal/supercontrol/cache-refresh?cadence=not-a-cadence");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/internal/supercontrol/cache-refresh?cadence=all");
         var response = await client.SendAsync(request);
-        var json = await response.Content.ReadAsStringAsync();
 
-        Assert.AreEqual(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
-        StringAssert.Contains(json, "Invalid cadence");
-    }
-
-    [TestMethod]
-    public async Task CacheRefreshEndpoint_WhenAccountsCadence_ReturnsRefreshSummary()
-    {
-        using var factory = CreateFactory(CreateAccountsIndexCachedResponse());
-        using var client = factory.CreateClient();
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/internal/supercontrol/cache-refresh?cadence=accounts");
-        var response = await client.SendAsync(request);
-        var json = await response.Content.ReadAsStringAsync();
-
-        Assert.AreEqual(System.Net.HttpStatusCode.OK, response.StatusCode);
-        using var document = JsonDocument.Parse(json);
-        var root = document.RootElement;
-        Assert.AreEqual("accounts", root.GetProperty("cadence").GetString());
-        Assert.AreEqual(1, root.GetProperty("accountCount").GetInt32());
-        Assert.AreEqual(1, root.GetProperty("requests").GetInt32());
-        Assert.AreEqual(1, root.GetProperty("successes").GetInt32());
-    }
-
-    [TestMethod]
-    public async Task CacheRefreshEndpoint_WhenGetUsed_ReturnsMethodNotAllowed()
-    {
-        using var factory = CreateFactory(CreateAccountsIndexCachedResponse());
-        using var client = factory.CreateClient();
-
-        var response = await client.GetAsync("/internal/supercontrol/cache-refresh?cadence=accounts");
-
-        Assert.AreEqual(System.Net.HttpStatusCode.MethodNotAllowed, response.StatusCode);
-    }
-
-    [TestMethod]
-    public async Task CacheRefreshEndpoint_WhenRapidPostsExceedLimit_ReturnsTooManyRequests()
-    {
-        using var factory = CreateFactory(CreateAccountsIndexCachedResponse());
-        using var client = factory.CreateClient();
-
-        const int permitLimit = 6;
-        for (var i = 0; i < permitLimit; i++)
-        {
-            using var allowedRequest = new HttpRequestMessage(HttpMethod.Post, "/internal/supercontrol/cache-refresh?cadence=accounts");
-            var allowedResponse = await client.SendAsync(allowedRequest);
-            Assert.AreEqual(System.Net.HttpStatusCode.OK, allowedResponse.StatusCode);
-        }
-
-        using var blockedRequest = new HttpRequestMessage(HttpMethod.Post, "/internal/supercontrol/cache-refresh?cadence=accounts");
-        var blockedResponse = await client.SendAsync(blockedRequest);
-
-        Assert.AreEqual((System.Net.HttpStatusCode)429, blockedResponse.StatusCode);
+        Assert.AreEqual(System.Net.HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [TestMethod]
