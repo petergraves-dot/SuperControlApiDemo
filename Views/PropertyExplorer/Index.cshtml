@@ -1,0 +1,213 @@
+@using System.Text.Json
+@model petergraves.ViewModels.PropertyExplorer.PropertyExplorerResponseViewModel
+@{
+    ViewData["Title"] = "SuperControl Map Property Explorer";
+    var markerData = Model.Properties
+        .Where(property => property.HasValidCoordinates)
+        .Select(property => new
+        {
+            id = property.PropertyId,
+            name = property.Name,
+            location = property.Location,
+            latitude = property.Latitude,
+            longitude = property.Longitude,
+            price = property.SelectedStayPrice ?? property.FromPrice,
+            currency = property.Currency,
+            selectedStay = property.SelectedStayPrice.HasValue,
+            approximate = property.CoordinatesAreApproximate
+        });
+    var markerJson = JsonSerializer.Serialize(markerData, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+    var searchSuggestions = Model.Suggestions.Select(suggestion => new
+    {
+        value = suggestion.Value,
+        type = suggestion.Type
+    });
+    var suggestionJson = JsonSerializer.Serialize(searchSuggestions, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet.markercluster@@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet.markercluster@@1.5.3/dist/MarkerCluster.Default.css" />
+    <link rel="stylesheet" href="~/css/property-explorer.css" asp-append-version="true" />
+}
+
+<div class="pe-shell" data-property-explorer data-initial-view="@Model.Request.View" data-initial-bbox="@Model.Request.Bbox">
+    <header class="pe-header">
+        <div>
+            <p class="pe-kicker">SuperControl + OpenStreetMap</p>
+            <h1>Find your place on the map</h1>
+            <p>Explore live property content, prices and availability without losing your place between the list and map.</p>
+        </div>
+        <a href="/supercontrol-property-explorer-tutorial">How this works</a>
+    </header>
+
+    <form method="get" class="pe-search" data-explorer-form>
+        <label class="pe-where-field">
+            <span>Where</span>
+            <input type="search"
+                   name="where"
+                   value="@Model.Request.Where"
+                   placeholder="Town, area or property"
+                   autocomplete="off"
+                   role="combobox"
+                   aria-autocomplete="list"
+                   aria-controls="property-search-suggestions"
+                   aria-expanded="false"
+                   data-location-search />
+            <div class="pe-suggestions"
+                 id="property-search-suggestions"
+                 role="listbox"
+                 aria-label="Property search suggestions"
+                 data-search-suggestions
+                 hidden></div>
+        </label>
+        <label>
+            <span>Check-in</span>
+            <input type="date" name="checkIn" value="@Model.Request.CheckIn?.ToString("yyyy-MM-dd")" />
+        </label>
+        <label>
+            <span>Check-out</span>
+            <input type="date" name="checkOut" value="@Model.Request.CheckOut?.ToString("yyyy-MM-dd")" />
+        </label>
+        <label>
+            <span>Guests</span>
+            <input type="number" name="guests" min="1" max="30" value="@Model.Request.Guests" />
+        </label>
+        <input type="hidden" name="bbox" value="@Model.Request.Bbox" data-bbox-input />
+        <input type="hidden" name="zoom" value="@Model.Request.Zoom" data-zoom-input />
+        <input type="hidden" name="view" value="@Model.Request.View" data-view-input />
+        <div class="pe-search-actions">
+            <button type="submit">Search</button>
+            <a href="/supercontrol-property-explorer">Reset search</a>
+        </div>
+    </form>
+
+    @if (!string.IsNullOrWhiteSpace(Model.Error))
+    {
+        <div class="pe-alert" role="alert">@Model.Error</div>
+    }
+
+    @if (Model.Loaded)
+    {
+        <div class="pe-toolbar">
+            <p aria-live="polite" data-result-summary>
+                <strong data-visible-count>@Model.Properties.Count</strong>
+                <span data-result-noun>@(Model.Properties.Count == 1 ? "property" : "properties")</span>
+            </p>
+            @if (Model.UnmappedPropertyCount > 0)
+            {
+                <p class="pe-map-note" data-unmapped-note>@Model.UnmappedPropertyCount without a map location</p>
+            }
+            <div class="pe-view-switch" aria-label="Choose result view">
+                <button type="button" data-view-button="list" aria-pressed="true">List</button>
+                <button type="button" data-view-button="map" aria-pressed="false">Map</button>
+            </div>
+        </div>
+
+        <main class="pe-results-layout">
+            <section class="pe-list" aria-label="Property results" data-list-panel>
+                @if (Model.Properties.Count == 0)
+                {
+                    <div class="pe-empty">
+                        <h2>No properties found</h2>
+                        <p>Try a wider map area, fewer guests, or different dates.</p>
+                    </div>
+                }
+                @foreach (var property in Model.Properties)
+                {
+                    <article class="pe-card" id="property-@property.PropertyId" data-property-id="@property.PropertyId" tabindex="-1">
+                        <div class="pe-card-media">
+                            @if (!string.IsNullOrWhiteSpace(property.HeroImageUrl))
+                            {
+                                <img src="@property.HeroImageUrl" alt="" loading="lazy" />
+                            }
+                            else
+                            {
+                                <span>No photograph</span>
+                            }
+                        </div>
+                        <div class="pe-card-body">
+                            <div class="pe-card-heading">
+                                <div>
+                                    <p>@property.PropertyType</p>
+                                    <h2>@property.Name</h2>
+                                </div>
+                                @if (property.AvailabilityStatus == "available" || property.AvailabilityStatus == "unavailable")
+                                {
+                                    <span class="pe-status @(property.AvailabilityStatus == "available" ? "is-available" : "is-unavailable")">
+                                        @(property.AvailabilityStatus == "available" ? "Available" : "Unavailable")
+                                    </span>
+                                }
+                                else if (property.HasSelectedDates)
+                                {
+                                    <span class="pe-status is-unknown">Availability unknown</span>
+                                }
+                            </div>
+                            <p class="pe-location">@property.Location</p>
+                            <div class="pe-facts">
+                                @if (property.MaximumGuests.HasValue)
+                                {
+                                    <span>Sleeps @property.MaximumGuests</span>
+                                }
+                                @if (property.CoordinatesAreApproximate)
+                                {
+                                    <span>Approximate map location</span>
+                                }
+                                else if (!property.HasValidCoordinates)
+                                {
+                                    <span>Map location unavailable</span>
+                                }
+                            </div>
+                            <div class="pe-card-footer">
+                                <div class="pe-price">
+                                    @if (property.SelectedStayPrice.HasValue)
+                                    {
+                                        <small>@property.SelectedStayNights-night total</small>
+                                        <strong>@property.SelectedStayPrice.Value.ToString("0.##") @property.Currency</strong>
+                                    }
+                                    else if (property.FromPrice.HasValue)
+                                    {
+                                        <small>From</small>
+                                        <strong>@property.FromPrice.Value.ToString("0.##") @property.Currency</strong>
+                                    }
+                                    else
+                                    {
+                                        <small>Price</small>
+                                        <strong>Ask for price</strong>
+                                    }
+                                </div>
+                                <a asp-controller="SuperControlProperty"
+                                   asp-action="Index"
+                                   asp-route-propertyId="@property.PropertyId"
+                                   asp-route-where="@Model.Request.Where"
+                                   asp-route-checkIn="@Model.Request.CheckIn?.ToString("yyyy-MM-dd")"
+                                   asp-route-checkOut="@Model.Request.CheckOut?.ToString("yyyy-MM-dd")"
+                                   asp-route-guests="@Model.Request.Guests">View property</a>
+                            </div>
+                        </div>
+                    </article>
+                }
+                <div class="pe-empty" data-viewport-empty hidden>
+                    <h2>No properties in this map area</h2>
+                    <p>Move or zoom out on the map, or search this area for more results.</p>
+                </div>
+            </section>
+
+            <section class="pe-map-panel" aria-label="Property map" data-map-panel>
+                <button type="button" class="pe-search-area" data-search-area hidden>Search this area</button>
+                <div id="property-map" class="pe-map"></div>
+                <noscript><p>The map requires JavaScript. All properties remain available in the list.</p></noscript>
+            </section>
+        </main>
+    }
+</div>
+
+<script type="application/json" id="property-map-data">@Html.Raw(markerJson)</script>
+<script type="application/json" id="property-search-suggestion-data">@Html.Raw(suggestionJson)</script>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet.markercluster@@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="/js/property-explorer.js"></script>
+}

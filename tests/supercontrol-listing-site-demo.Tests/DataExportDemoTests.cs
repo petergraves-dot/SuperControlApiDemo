@@ -206,6 +206,17 @@ public class DataExportDemoViewModelFactoryTests
     }
 
     [TestMethod]
+    public async Task PropertyExplorerTutorialRoute_ReturnsSuccess()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/supercontrol-property-explorer-tutorial");
+
+        Assert.AreEqual(System.Net.HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [TestMethod]
     public async Task ListingSiteTestsRoute_ReturnsSuccess()
     {
         using var factory = CreateFactory();

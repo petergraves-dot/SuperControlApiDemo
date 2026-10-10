@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Ganss.Xss;
 using Microsoft.AspNetCore.Hosting;
@@ -15,7 +17,9 @@ public interface ISuperControlListingSiteService
         int guests,
         DateOnly? checkIn,
         DateOnly? checkOut,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        PropertyMapBounds? bounds = null,
+        int maxResults = 12);
 
     Task<SuperControlPropertyDetailResult> GetPropertyDetailAsync(
         int accountId,
@@ -28,6 +32,7 @@ public interface ISuperControlListingSiteService
 
 public sealed class SuperControlListingSiteService : ISuperControlListingSiteService
 {
+    private static readonly SemaphoreSlim CatalogBuildGate = new(1, 1);
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -54,11 +59,10 @@ public sealed class SuperControlListingSiteService : ISuperControlListingSiteSer
         int guests,
         DateOnly? checkIn,
         DateOnly? checkOut,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        PropertyMapBounds? bounds = null,
+        int maxResults = 12)
     {
-        const int maxConcurrentPayloadFetches = 8;
-        using var payloadFetchGate = new SemaphoreSlim(maxConcurrentPayloadFetches);
-
         var account = await ResolveAccountAsync(accountId, cancellationToken);
         if (account is null)
         {
@@ -70,14 +74,16 @@ public sealed class SuperControlListingSiteService : ISuperControlListingSiteSer
         }
 
         var contentIndexUrl = ResolveIndexUrl(account.ContentIndexUrl, $"properties/contentindex/{account.AccountId}");
+        var configurationIndexUrl = ResolveIndexUrl(account.ConfigurationIndexUrl, $"properties/configurationindex/{account.AccountId}");
         var pricesIndexUrl = ResolveIndexUrl(account.PricesIndexUrl, $"properties/pricesindex/{account.AccountId}");
         var availabilityIndexUrl = ResolveIndexUrl(account.AvailabilityIndexUrl, $"properties/availabilityindex/{account.AccountId}");
 
         var contentTask = GetTypedByUrlAsync<ContentIndexResponse>(contentIndexUrl, TimeSpan.FromMinutes(2), cancellationToken);
+        var configurationIndexTask = GetTypedByUrlAsync<ConfigurationIndexResponse>(configurationIndexUrl, TimeSpan.FromMinutes(2), cancellationToken);
         var pricesIndexTask = GetTypedByUrlAsync<PricesIndexResponse>(pricesIndexUrl, TimeSpan.FromMinutes(2), cancellationToken);
         var availabilityIndexTask = GetTypedByUrlAsync<AvailabilityIndexResponse>(availabilityIndexUrl, TimeSpan.FromMinutes(2), cancellationToken);
 
-        await Task.WhenAll(contentTask, pricesIndexTask, availabilityIndexTask);
+        await Task.WhenAll(contentTask, configurationIndexTask, pricesIndexTask, availabilityIndexTask);
 
         var content = contentTask.Result;
         if (content is null || content.Properties.Count == 0)
@@ -89,143 +95,33 @@ public sealed class SuperControlListingSiteService : ISuperControlListingSiteSer
             };
         }
 
-        var availabilityByProperty = availabilityIndexTask.Result?.Properties
-            .ToDictionary(property => property.PropertyId, property => property)
-            ?? new Dictionary<int, AvailabilityIndexEntry>();
+        var catalog = await GetCatalogAsync(
+            account.AccountId,
+            content,
+            configurationIndexTask.Result,
+            pricesIndexTask.Result,
+            availabilityIndexTask.Result,
+            cancellationToken);
 
-        var pricingMap = pricesIndexTask.Result?.Properties
-            .ToDictionary(property => property.PropertyId, property => property)
-            ?? new Dictionary<int, PricesIndexEntry>();
-
-        var candidates = content.Properties
-            .Where(property => property.Active)
-            .OrderByDescending(property => property.LastUpdated)
-            .Take(20)
-            .ToList();
-
-        var listingTasks = candidates.Select(async property =>
-        {
-            var listing = await RunWithConcurrencyLimitAsync(
-                payloadFetchGate,
-                () => GetDeltaCachedPropertyPayloadAsync<PropertyListingResponse>(
-                    payloadType: "listing",
-                    propertyId: property.PropertyId,
-                    payloadUrl: property.ListingUrl,
-                    lastUpdatedUtc: property.LastUpdated.UtcDateTime,
-                    cancellationToken),
-                cancellationToken);
-            return (Property: property, Listing: listing.Payload, listing.CacheDisposition);
-        });
-
-        var listingResults = await Task.WhenAll(listingTasks);
-        var cacheHits = 0;
-        var cacheMisses = 0;
-        var staleFallbackHits = 0;
-
-        var enrichmentTasks = listingResults.Select(async result =>
-        {
-            var localCacheHits = 0;
-            var localCacheMisses = 0;
-            var localStaleFallbackHits = 0;
-
-            if (result.Listing is null)
-            {
-                return (Card: (SuperControlPropertyCard?)null, localCacheHits, localCacheMisses, localStaleFallbackHits);
-            }
-
-            CountCache(result.CacheDisposition, ref localCacheHits, ref localCacheMisses, ref localStaleFallbackHits);
-
-            var address = result.Listing.Location?.Address;
-            var location = BuildLocation(result.Listing);
-            if (!MatchesQuery(query, result.Listing, location))
-            {
-                return (Card: (SuperControlPropertyCard?)null, localCacheHits, localCacheMisses, localStaleFallbackHits);
-            }
-
-            var card = new SuperControlPropertyCard
-            {
-                PropertyId = result.Property.PropertyId,
-                Name = result.Listing.AdContent?.PropertyName ?? $"Property {result.Property.PropertyId}",
-                SubCaption = result.Listing.AdContent?.Subcaption,
-                Description = result.Listing.AdContent?.Description
-                    ?? result.Listing.AdContent?.AccommodationsSummary,
-                DescriptionHtml = BuildSafeDescriptionHtml(
-                    result.Listing.AdContent?.Description
-                    ?? result.Listing.AdContent?.AccommodationsSummary),
-                Location = location,
-                City = address?.City,
-                Country = address?.Country,
-                HeroImageUrl = result.Listing.Images.FirstOrDefault(image => !string.IsNullOrWhiteSpace(image.Url))?.Url,
-                Amenities = result.Listing.Property?.Amenities?.Take(6).ToList() ?? [],
-                PropertyType = result.Listing.Property?.PropertyType,
-                LastUpdatedUtc = result.Property.LastUpdated.UtcDateTime
-            };
-
-            Task<DeltaCachedPayloadResult<PricesListingResponse>>? pricesTask = null;
-            if (pricingMap.TryGetValue(card.PropertyId, out var pricesEntry))
-            {
-                pricesTask = RunWithConcurrencyLimitAsync(
-                    payloadFetchGate,
-                    () => GetDeltaCachedPropertyPayloadAsync<PricesListingResponse>(
-                        payloadType: "prices",
-                        propertyId: card.PropertyId,
-                        payloadUrl: pricesEntry.ListingUrl,
-                        lastUpdatedUtc: pricesEntry.LastUpdated.UtcDateTime,
-                        cancellationToken),
-                    cancellationToken);
-            }
-
-            Task<DeltaCachedPayloadResult<AvailabilityListingResponse>>? availabilityTask = null;
-            if (availabilityByProperty.TryGetValue(card.PropertyId, out var availabilityEntry))
-            {
-                availabilityTask = RunWithConcurrencyLimitAsync(
-                    payloadFetchGate,
-                    () => GetDeltaCachedPropertyPayloadAsync<AvailabilityListingResponse>(
-                        payloadType: "availability",
-                        propertyId: card.PropertyId,
-                        payloadUrl: availabilityEntry.ListingUrl,
-                        lastUpdatedUtc: availabilityEntry.LastUpdated.UtcDateTime,
-                        cancellationToken),
-                    cancellationToken);
-            }
-
-            var pricesResult = pricesTask is null ? null : await pricesTask;
-            if (pricesResult is not null)
-            {
-                CountCache(pricesResult.CacheDisposition, ref localCacheHits, ref localCacheMisses, ref localStaleFallbackHits);
-                var prices = pricesResult.Payload;
-                card.FromPrice = ExtractFromPrice(prices?.Prices?.PriceLos);
-                card.Currency = prices?.Prices?.Currency;
-                ApplySelectedStayPrice(card, prices?.Prices?.PriceLos, checkIn, checkOut);
-            }
-
-            var availabilityResult = availabilityTask is null ? null : await availabilityTask;
-            if (availabilityResult is not null)
-            {
-                CountCache(availabilityResult.CacheDisposition, ref localCacheHits, ref localCacheMisses, ref localStaleFallbackHits);
-                var availability = availabilityResult.Payload;
-                ApplyAvailability(card, availability?.PropertyAvailability, checkIn, checkOut);
-            }
-
-            return (Card: card, localCacheHits, localCacheMisses, localStaleFallbackHits);
-        });
-
-        var enrichedResults = await Task.WhenAll(enrichmentTasks);
-        var cards = enrichedResults
-            .Where(result => result.Card is not null)
-            .Select(result => result.Card!)
-            .ToList();
-
-        cacheHits += enrichedResults.Sum(result => result.localCacheHits);
-        cacheMisses += enrichedResults.Sum(result => result.localCacheMisses);
-        staleFallbackHits += enrichedResults.Sum(result => result.localStaleFallbackHits);
-
-        cards = cards
+        var inferredCoordinatesByLocation = BuildInferredCoordinates(catalog.Properties);
+        var hasSelectedDates = checkIn.HasValue && checkOut.HasValue && checkOut > checkIn;
+        var cards = catalog.Properties
+            .Where(property => MatchesQuery(query, property.Listing, BuildLocation(property.Listing)))
+            .Select(property => BuildSearchCard(property, inferredCoordinatesByLocation, checkIn, checkOut))
+            .Where(card => !card.MaximumGuests.HasValue || card.MaximumGuests.Value >= guests)
+            .Where(card => bounds is null
+                || card.Latitude.HasValue
+                    && card.Longitude.HasValue
+                    && bounds.Contains(card.Latitude.Value, card.Longitude.Value))
+            .Where(card => !hasSelectedDates
+                || card.HasAvailabilityData
+                    && card.SelectedDatesWithinAvailabilityCoverage
+                    && card.IsAvailableForSelectedDates)
             .OrderByDescending(card => card.IsAvailableForSelectedDates)
             .ThenBy(card => card.SelectedStayPrice ?? decimal.MaxValue)
             .ThenBy(card => card.FromPrice ?? decimal.MaxValue)
             .ThenBy(card => card.Name)
-            .Take(12)
+            .Take(Math.Clamp(maxResults, 1, 100))
             .ToList();
 
         return new SuperControlListingSiteSnapshot
@@ -234,11 +130,227 @@ public sealed class SuperControlListingSiteService : ISuperControlListingSiteSer
             TotalActiveProperties = content.Properties.Count(property => property.Active),
             ReturnedProperties = cards.Count,
             Properties = cards,
-            CacheHits = cacheHits,
-            CacheMisses = cacheMisses,
-            StaleFallbackHits = staleFallbackHits
+            Suggestions = BuildSuggestions(catalog.Properties),
+            CacheHits = catalog.CacheHits,
+            CacheMisses = catalog.CacheMisses,
+            StaleFallbackHits = catalog.StaleFallbackHits
         };
     }
+
+    private async Task<SuperControlPropertyCatalog> GetCatalogAsync(
+        int accountId,
+        ContentIndexResponse content,
+        ConfigurationIndexResponse? configurationIndex,
+        PricesIndexResponse? pricesIndex,
+        AvailabilityIndexResponse? availabilityIndex,
+        CancellationToken cancellationToken)
+    {
+        var fingerprint = BuildCatalogFingerprint(content, configurationIndex, pricesIndex, availabilityIndex);
+        var cacheKey = $"sc-property-catalog::{accountId}::{fingerprint}";
+        if (_cache.TryGetValue(cacheKey, out SuperControlPropertyCatalog? cached) && cached is not null)
+        {
+            return cached;
+        }
+
+        await CatalogBuildGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (_cache.TryGetValue(cacheKey, out cached) && cached is not null)
+            {
+                return cached;
+            }
+
+            const int maxConcurrentPayloadFetches = 8;
+            using var fetchGate = new SemaphoreSlim(maxConcurrentPayloadFetches);
+            var configurations = configurationIndex?.Properties.ToDictionary(item => item.PropertyId) ?? [];
+            var prices = pricesIndex?.Properties.ToDictionary(item => item.PropertyId) ?? [];
+            var availability = availabilityIndex?.Properties.ToDictionary(item => item.PropertyId) ?? [];
+
+            var tasks = content.Properties.Where(item => item.Active).Select(async item =>
+            {
+                var hits = 0;
+                var misses = 0;
+                var staleHits = 0;
+                var listingResult = await RunWithConcurrencyLimitAsync(fetchGate, () =>
+                    GetDeltaCachedPropertyPayloadAsync<PropertyListingResponse>(
+                        "listing", item.PropertyId, item.ListingUrl, item.LastUpdated.UtcDateTime, cancellationToken), cancellationToken);
+                CountCache(listingResult.CacheDisposition, ref hits, ref misses, ref staleHits);
+                if (listingResult.Payload is null)
+                {
+                    return (Property: (SuperControlCatalogProperty?)null, hits, misses, staleHits);
+                }
+
+                Task<DeltaCachedPayloadResult<PropertyConfigurationListingResponse>>? configurationTask = null;
+                if (configurations.TryGetValue(item.PropertyId, out var configuration)
+                    && !string.IsNullOrWhiteSpace(configuration.ConfigurationContentUrl))
+                {
+                    configurationTask = RunWithConcurrencyLimitAsync(fetchGate, () =>
+                        GetDeltaCachedPropertyPayloadAsync<PropertyConfigurationListingResponse>(
+                            "propertyconfiguration", item.PropertyId, configuration.ConfigurationContentUrl,
+                            configuration.LastUpdated.UtcDateTime, cancellationToken), cancellationToken);
+                }
+
+                Task<DeltaCachedPayloadResult<PricesListingResponse>>? priceTask = null;
+                if (prices.TryGetValue(item.PropertyId, out var price))
+                {
+                    priceTask = RunWithConcurrencyLimitAsync(fetchGate, () =>
+                        GetDeltaCachedPropertyPayloadAsync<PricesListingResponse>(
+                            "prices", item.PropertyId, price.ListingUrl, price.LastUpdated.UtcDateTime, cancellationToken), cancellationToken);
+                }
+
+                Task<DeltaCachedPayloadResult<AvailabilityListingResponse>>? availabilityTask = null;
+                if (availability.TryGetValue(item.PropertyId, out var available))
+                {
+                    availabilityTask = RunWithConcurrencyLimitAsync(fetchGate, () =>
+                        GetDeltaCachedPropertyPayloadAsync<AvailabilityListingResponse>(
+                            "availability", item.PropertyId, available.ListingUrl, available.LastUpdated.UtcDateTime, cancellationToken), cancellationToken);
+                }
+
+                var configurationResult = configurationTask is null ? null : await configurationTask;
+                var priceResult = priceTask is null ? null : await priceTask;
+                var availabilityResult = availabilityTask is null ? null : await availabilityTask;
+                if (configurationResult is not null) CountCache(configurationResult.CacheDisposition, ref hits, ref misses, ref staleHits);
+                if (priceResult is not null) CountCache(priceResult.CacheDisposition, ref hits, ref misses, ref staleHits);
+                if (availabilityResult is not null) CountCache(availabilityResult.CacheDisposition, ref hits, ref misses, ref staleHits);
+
+                return (Property: new SuperControlCatalogProperty(
+                    item,
+                    listingResult.Payload,
+                    configurationResult?.Payload?.Configuration,
+                    priceResult?.Payload?.Prices,
+                    availabilityResult?.Payload?.PropertyAvailability), hits, misses, staleHits);
+            });
+
+            var results = await Task.WhenAll(tasks);
+            var catalog = new SuperControlPropertyCatalog(
+                results.Where(result => result.Property is not null).Select(result => result.Property!).ToList(),
+                results.Sum(result => result.hits),
+                results.Sum(result => result.misses),
+                results.Sum(result => result.staleHits));
+            _cache.Set(cacheKey, catalog, TimeSpan.FromMinutes(15));
+            return catalog;
+        }
+        finally
+        {
+            CatalogBuildGate.Release();
+        }
+    }
+
+    private static string BuildCatalogFingerprint(
+        ContentIndexResponse content,
+        ConfigurationIndexResponse? configuration,
+        PricesIndexResponse? prices,
+        AvailabilityIndexResponse? availability)
+    {
+        var source = new StringBuilder();
+        foreach (var item in content.Properties.Where(item => item.Active).OrderBy(item => item.PropertyId))
+            source.Append('c').Append(item.PropertyId).Append(':').Append(item.LastUpdated.UtcTicks).Append(';');
+        foreach (var item in configuration?.Properties.OrderBy(item => item.PropertyId)
+            ?? Enumerable.Empty<PropertyConfigurationIndexEntry>())
+            source.Append('g').Append(item.PropertyId).Append(':').Append(item.LastUpdated.UtcTicks).Append(';');
+        foreach (var item in prices?.Properties.OrderBy(item => item.PropertyId)
+            ?? Enumerable.Empty<PricesIndexEntry>())
+            source.Append('p').Append(item.PropertyId).Append(':').Append(item.LastUpdated.UtcTicks).Append(';');
+        foreach (var item in availability?.Properties.OrderBy(item => item.PropertyId)
+            ?? Enumerable.Empty<AvailabilityIndexEntry>())
+            source.Append('a').Append(item.PropertyId).Append(':').Append(item.LastUpdated.UtcTicks).Append(';');
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source.ToString())));
+    }
+
+    private static SuperControlPropertyCard BuildSearchCard(
+        SuperControlCatalogProperty property,
+        IReadOnlyDictionary<string, (double Latitude, double Longitude)> inferredCoordinates,
+        DateOnly? checkIn,
+        DateOnly? checkOut)
+    {
+        var listing = property.Listing;
+        var address = listing.Location?.Address;
+        var location = BuildLocation(listing);
+        var coordinates = GetValidCoordinate(listing.Location?.GeoCode);
+        var approximate = false;
+        if (!coordinates.Latitude.HasValue && inferredCoordinates.TryGetValue(location.Trim(), out var inferred))
+        {
+            coordinates = inferred;
+            approximate = true;
+        }
+
+        var card = new SuperControlPropertyCard
+        {
+            PropertyId = property.Index.PropertyId,
+            Name = listing.AdContent?.PropertyName ?? $"Property {property.Index.PropertyId}",
+            SubCaption = listing.AdContent?.Subcaption,
+            Description = listing.AdContent?.Description ?? listing.AdContent?.AccommodationsSummary,
+            DescriptionHtml = BuildSafeDescriptionHtml(listing.AdContent?.Description ?? listing.AdContent?.AccommodationsSummary),
+            Location = location,
+            City = address?.City,
+            Country = address?.Country,
+            Latitude = coordinates.Latitude,
+            Longitude = coordinates.Longitude,
+            CoordinatesAreApproximate = approximate,
+            HeroImageUrl = listing.Images.FirstOrDefault(image => !string.IsNullOrWhiteSpace(image.Url))?.Url,
+            Amenities = listing.Property?.Amenities?.Take(6).ToList() ?? [],
+            PropertyType = listing.Property?.PropertyType,
+            LastUpdatedUtc = property.Index.LastUpdated.UtcDateTime,
+            MaximumGuests = property.Configuration?.MaximumOccupancy?.Guests,
+            AllowBookings = property.Configuration?.AllowBookings,
+            FromPrice = ExtractFromPrice(property.Prices?.PriceLos),
+            Currency = property.Prices?.Currency
+        };
+        ApplySelectedStayPrice(card, property.Prices?.PriceLos, checkIn, checkOut);
+        ApplyAvailability(card, property.Availability, checkIn, checkOut);
+        return card;
+    }
+
+    private static Dictionary<string, (double Latitude, double Longitude)> BuildInferredCoordinates(
+        IReadOnlyList<SuperControlCatalogProperty> properties)
+    {
+        const double maximumRadiusKm = 30;
+        return properties
+            .Where(property => !string.IsNullOrWhiteSpace(property.Listing.Location?.Address?.City)
+                && !string.IsNullOrWhiteSpace(property.Listing.Location?.Address?.Country))
+            .Select(property => new
+            {
+                Location = BuildLocation(property.Listing).Trim(),
+                Coordinates = GetValidCoordinate(property.Listing.Location?.GeoCode)
+            })
+            .Where(item => item.Coordinates.Latitude.HasValue && item.Coordinates.Longitude.HasValue)
+            .GroupBy(item => item.Location, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() >= 2)
+            .Select(group => new
+            {
+                group.Key,
+                Latitude = group.Average(item => item.Coordinates.Latitude!.Value),
+                Longitude = group.Average(item => item.Coordinates.Longitude!.Value),
+                Points = group.ToList()
+            })
+            .Where(group => group.Points.All(point => DistanceInKilometres(
+                group.Latitude, group.Longitude,
+                point.Coordinates.Latitude!.Value, point.Coordinates.Longitude!.Value) <= maximumRadiusKm))
+            .ToDictionary(group => group.Key, group => (group.Latitude, group.Longitude), StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static double DistanceInKilometres(double latitude1, double longitude1, double latitude2, double longitude2)
+    {
+        const double earthRadiusKm = 6371;
+        var latitudeDelta = (latitude2 - latitude1) * Math.PI / 180;
+        var longitudeDelta = (longitude2 - longitude1) * Math.PI / 180;
+        var a = Math.Sin(latitudeDelta / 2) * Math.Sin(latitudeDelta / 2)
+            + Math.Cos(latitude1 * Math.PI / 180) * Math.Cos(latitude2 * Math.PI / 180)
+            * Math.Sin(longitudeDelta / 2) * Math.Sin(longitudeDelta / 2);
+        return earthRadiusKm * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+    }
+
+    private static IReadOnlyList<SuperControlSearchSuggestion> BuildSuggestions(IReadOnlyList<SuperControlCatalogProperty> properties) =>
+        properties.SelectMany(property => new[]
+            {
+                new SuperControlSearchSuggestion(BuildLocation(property.Listing), "Location"),
+                new SuperControlSearchSuggestion(property.Listing.AdContent?.PropertyName ?? string.Empty, "Property")
+            })
+            .Where(suggestion => !string.IsNullOrWhiteSpace(suggestion.Value))
+            .DistinctBy(suggestion => suggestion.Value, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(suggestion => suggestion.Type == "Location" ? 0 : 1)
+            .ThenBy(suggestion => suggestion.Value)
+            .ToList();
 
     private static async Task<T> RunWithConcurrencyLimitAsync<T>(
         SemaphoreSlim gate,
@@ -603,6 +715,19 @@ public sealed class SuperControlListingSiteService : ISuperControlListingSiteSer
         return city ?? country ?? listing.AdContent?.LocationText ?? "Location not set";
     }
 
+    private static (double? Latitude, double? Longitude) GetValidCoordinate(PropertyGeoCode? geoCode)
+    {
+        if (geoCode?.Latitude is not double latitude || geoCode.Longitude is not double longitude
+            || latitude is < -90 or > 90
+            || longitude is < -180 or > 180
+            || (Math.Abs(latitude) < 0.000001 && Math.Abs(longitude) < 0.000001))
+        {
+            return (null, null);
+        }
+
+        return (latitude, longitude);
+    }
+
     private static decimal? ExtractFromPrice(List<string>? priceLos)
     {
         if (priceLos is null || priceLos.Count == 0) return null;
@@ -634,6 +759,7 @@ public sealed class SuperControlListingSiteService : ISuperControlListingSiteSer
         }
 
         var series = availability.Availability;
+        card.HasAvailabilityData = true;
         card.AvailabilityCoverageStartUtc = availability.StartDate.UtcDateTime;
         card.AvailabilityCoverageEndUtc = availability.EndDate.UtcDateTime;
         card.NextKnownAvailableDateUtc = FindNextAvailableDate(availability.StartDate.UtcDateTime.Date, series);
@@ -645,7 +771,29 @@ public sealed class SuperControlListingSiteService : ISuperControlListingSiteSer
 
         var start = checkIn.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).Date;
         var end = checkOut.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).Date;
-        card.IsAvailableForSelectedDates = IsRangeAvailable(availability.StartDate.UtcDateTime.Date, series, start, end);
+        var coverageStart = availability.StartDate.UtcDateTime.Date;
+        var coverageEndExclusive = coverageStart.AddDays(series.Length);
+        card.SelectedDatesWithinAvailabilityCoverage = start >= coverageStart && end <= coverageEndExclusive;
+        card.IsAvailableForSelectedDates = IsRangeAvailable(coverageStart, series, start, end)
+            && MeetsMinimumStay(availability.MinStay, coverageStart, start, end);
+    }
+
+    private static bool MeetsMinimumStay(string? minimumStaySeries, DateTime seriesStartUtcDate, DateTime startUtcDate, DateTime endUtcDateExclusive)
+    {
+        if (string.IsNullOrWhiteSpace(minimumStaySeries))
+        {
+            return true;
+        }
+
+        var arrivalIndex = (int)(startUtcDate - seriesStartUtcDate).TotalDays;
+        var values = minimumStaySeries.Split(',', StringSplitOptions.TrimEntries);
+        if (arrivalIndex < 0 || arrivalIndex >= values.Length
+            || !int.TryParse(values[arrivalIndex], NumberStyles.Integer, CultureInfo.InvariantCulture, out var minimumNights))
+        {
+            return false;
+        }
+
+        return (endUtcDateExclusive - startUtcDate).TotalDays >= minimumNights;
     }
 
     private static DateTime? FindNextAvailableDate(DateTime seriesStartUtcDate, string series)
@@ -949,6 +1097,8 @@ public sealed class SuperControlListingSiteSnapshot
 
     public IReadOnlyList<SuperControlPropertyCard> Properties { get; init; } = [];
 
+    public IReadOnlyList<SuperControlSearchSuggestion> Suggestions { get; init; } = [];
+
     public IReadOnlyList<string> Errors { get; init; } = [];
 
     public int CacheHits { get; init; }
@@ -958,12 +1108,48 @@ public sealed class SuperControlListingSiteSnapshot
     public int StaleFallbackHits { get; init; }
 }
 
+public sealed record SuperControlSearchSuggestion(string Value, string Type);
+
+internal sealed record SuperControlCatalogProperty(
+    SuperControlPropertyIndexEntry Index,
+    PropertyListingResponse Listing,
+    PropertyConfigurationData? Configuration,
+    PricesData? Prices,
+    PropertyAvailabilityData? Availability);
+
+internal sealed record SuperControlPropertyCatalog(
+    IReadOnlyList<SuperControlCatalogProperty> Properties,
+    int CacheHits,
+    int CacheMisses,
+    int StaleFallbackHits);
+
 public sealed record SuperControlSearchContext(
     string? Query,
     int Guests,
     DateOnly? CheckIn,
     DateOnly? CheckOut
 );
+
+public sealed record PropertyMapBounds(double West, double South, double East, double North)
+{
+    public bool IsValid => West is >= -180 and <= 180
+        && East is >= -180 and <= 180
+        && South is >= -90 and <= 90
+        && North is >= -90 and <= 90
+        && South <= North;
+
+    public bool Contains(double latitude, double longitude)
+    {
+        if (!IsValid || latitude < South || latitude > North)
+        {
+            return false;
+        }
+
+        return West <= East
+            ? longitude >= West && longitude <= East
+            : longitude >= West || longitude <= East;
+    }
+}
 
 public sealed class SuperControlPropertyCard
 {
@@ -983,6 +1169,16 @@ public sealed class SuperControlPropertyCard
 
     public string? Country { get; init; }
 
+    public double? Latitude { get; init; }
+
+    public double? Longitude { get; init; }
+
+    public bool CoordinatesAreApproximate { get; init; }
+
+    public int? MaximumGuests { get; set; }
+
+    public bool? AllowBookings { get; set; }
+
     public string? HeroImageUrl { get; init; }
 
     public string? PropertyType { get; init; }
@@ -998,6 +1194,10 @@ public sealed class SuperControlPropertyCard
     public string? Currency { get; set; }
 
     public bool IsAvailableForSelectedDates { get; set; }
+
+    public bool HasAvailabilityData { get; set; }
+
+    public bool SelectedDatesWithinAvailabilityCoverage { get; set; }
 
     public DateTime? NextKnownAvailableDateUtc { get; set; }
 

@@ -18,6 +18,12 @@ public sealed class SiteController : Controller
         return View("~/Views/SuperControlListingSiteTutorial/Index.cshtml");
     }
 
+    [HttpGet("/supercontrol-property-explorer-tutorial")]
+    public IActionResult SuperControlPropertyExplorerTutorial()
+    {
+        return View("~/Views/PropertyExplorerTutorial/Index.cshtml");
+    }
+
     [HttpGet("/supercontrol-listing-site-tests")]
     public IActionResult SuperControlListingSiteTests()
     {

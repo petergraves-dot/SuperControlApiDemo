@@ -3,6 +3,7 @@ using petergraves.Features.SuperControlDemo;
 using petergraves.Features.SuperControlDataExportDemo;
 using petergraves.Features.SuperControlListingSiteDemo;
 using petergraves.Features.SuperControlProperty;
+using petergraves.Features.PropertyExplorer;
 using petergraves.Integrations.SuperControl;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -62,11 +63,12 @@ builder.Services.AddScoped<ISuperControlListingSiteService, SuperControlListingS
 builder.Services.AddScoped<ISuperControlListingSiteDemoViewModelFactory, SuperControlListingSiteDemoViewModelFactory>();
 builder.Services.AddScoped<ISuperControlPropertyViewModelFactory, SuperControlPropertyViewModelFactory>();
 builder.Services.AddScoped<IDataExportDemoViewModelFactory, DataExportDemoViewModelFactory>();
+builder.Services.AddScoped<IPropertyExplorerViewModelFactory, PropertyExplorerViewModelFactory>();
 
 var app = builder.Build();
 var cookieAudit = new List<object>();
 const int cookieAuditLimit = 200;
-const string contentSecurityPolicy = "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' https://secure.supercontrol.co.uk; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self'; connect-src 'self' https://api.supercontrol.co.uk https://secure.supercontrol.co.uk; frame-src 'self' https://secure.supercontrol.co.uk";
+const string contentSecurityPolicy = "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' https://secure.supercontrol.co.uk https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' https: data:; font-src 'self'; connect-src 'self' https://api.supercontrol.co.uk https://secure.supercontrol.co.uk https://tile.openstreetmap.org; frame-src 'self' https://secure.supercontrol.co.uk";
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
@@ -145,6 +147,7 @@ app.MapGet("/sitemap.xml", (HttpRequest request) =>
         (Path: "/", ChangeFreq: "weekly", Priority: "1.0"),
         (Path: "/supercontrol-demo", ChangeFreq: "daily", Priority: "0.9"),
         (Path: "/supercontrol-listing-site-tutorial", ChangeFreq: "weekly", Priority: "0.7"),
+        (Path: "/supercontrol-property-explorer-tutorial", ChangeFreq: "weekly", Priority: "0.7"),
         (Path: "/supercontrol-data-export", ChangeFreq: "weekly", Priority: "0.7"),
         (Path: "/supercontrol-data-export-tutorial", ChangeFreq: "weekly", Priority: "0.6")
     };
@@ -199,6 +202,7 @@ static bool ShouldNoIndex(PathString path)
     }
 
     return path.Value!.StartsWith("/supercontrol-listing-site-demo", StringComparison.OrdinalIgnoreCase)
+        || path.Value.StartsWith("/supercontrol-property-explorer", StringComparison.OrdinalIgnoreCase)
         || path.Value.StartsWith("/supercontrol-data-export", StringComparison.OrdinalIgnoreCase);
 }
 
