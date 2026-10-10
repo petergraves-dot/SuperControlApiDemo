@@ -195,6 +195,18 @@ public sealed class PropertyLocation
 {
     [JsonPropertyName("address")]
     public PropertyAddress? Address { get; init; }
+
+    [JsonPropertyName("geoCode")]
+    public PropertyGeoCode? GeoCode { get; init; }
+}
+
+public sealed class PropertyGeoCode
+{
+    [JsonPropertyName("latitude")]
+    public double? Latitude { get; init; }
+
+    [JsonPropertyName("longitude")]
+    public double? Longitude { get; init; }
 }
 
 public sealed class PropertyAddress

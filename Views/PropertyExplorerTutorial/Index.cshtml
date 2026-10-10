@@ -1,0 +1,234 @@
+@{
+    ViewData["Title"] = "SuperControl Map Property Explorer Tutorial";
+}
+
+<section class="sv-wrap">
+    <div class="ambient-orb orb-a"></div>
+    <div class="ambient-orb orb-b"></div>
+
+    <div class="sv-shell sv-doc-page">
+        <header class="sv-hero">
+            <p class="kicker">Implementation Guide</p>
+            <nav class="sv-breadcrumb" aria-label="Breadcrumb">
+                <ol>
+                    <li><a asp-controller="Site" asp-action="Index">Home</a></li>
+                    <li><a href="/supercontrol-listing-site-demo">Listing Demo</a></li>
+                    <li><a href="/supercontrol-property-explorer">Map Explorer</a></li>
+                    <li><span aria-current="page">Tutorial</span></li>
+                </ol>
+            </nav>
+            <h1>Build a Map-Based Property Explorer with SuperControl and Leaflet</h1>
+            <p class="lead">Build a holiday-rental search experience where the result list, map, dates, guests and URL stay in sync, using SuperControl data, OpenStreetMap tiles and Leaflet.</p>
+        </header>
+
+        <section class="sv-doc">
+            <h2>What you are building</h2>
+            <p>The finished page is available at <a class="text-link" href="/supercontrol-property-explorer">/supercontrol-property-explorer</a>. It includes:</p>
+            <ul>
+                <li>a result list and map that respond to the same search state;</li>
+                <li>search within the visible map area;</li>
+                <li>marker clustering and spiderfying for dense groups;</li>
+                <li>date, guest and location filters;</li>
+                <li>property and location suggestions;</li>
+                <li>mobile list and map views;</li>
+                <li>stable URLs that can be bookmarked or shared;</li>
+                <li>a hand-off to the existing property and booking journey.</li>
+            </ul>
+            <p>The interaction model is familiar to users of large holiday-rental sites, but the layout, copy, markup and styling are original to this project.</p>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Prerequisites</h2>
+            <ul>
+                <li>.NET 10 SDK</li>
+                <li>a SuperControl API token and account ID</li>
+                <li>the existing <code>ISuperControlClient</code> connection from the listing-site demo</li>
+                <li>Leaflet 1.9.4 and Leaflet.markercluster 1.5.3</li>
+            </ul>
+            <pre class="sc-pre">dotnet restore supercontrol-listing-site-demo-public.sln
+dotnet run --project supercontrol-listing-site-demo.csproj</pre>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Core files</h2>
+            <ul>
+                <li><code>Controllers/PropertyExplorerController.cs</code></li>
+                <li><code>Features/PropertyExplorer/PropertyExplorerViewModelFactory.cs</code></li>
+                <li><code>ViewModels/PropertyExplorer/PropertyExplorerRequestViewModel.cs</code></li>
+                <li><code>ViewModels/PropertyExplorer/PropertyExplorerResponseViewModel.cs</code></li>
+                <li><code>Integrations/SuperControl/SuperControlListingSiteService.cs</code></li>
+                <li><code>Views/PropertyExplorer/Index.cshtml</code></li>
+                <li><code>wwwroot/js/property-explorer.js</code></li>
+                <li><code>wwwroot/css/property-explorer.css</code></li>
+            </ul>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Keep search state in the URL</h2>
+            <p>The request model is the single representation of the current search. It binds location, dates, guests, map bounds, zoom and the mobile view from the query string.</p>
+            <pre class="sc-pre">public sealed record PropertyExplorerRequestViewModel
+{
+    public string? Where { get; init; }
+    public DateOnly? CheckIn { get; init; }
+    public DateOnly? CheckOut { get; init; }
+    public int Guests { get; init; } = 2;
+    public string? Bbox { get; init; }
+    public int? Zoom { get; init; }
+    public string View { get; init; } = "list";
+}</pre>
+            <p>A URL can therefore restore both the commercial search and the map position:</p>
+            <pre class="sc-pre">/supercontrol-property-explorer?where=Castle+Douglas&amp;checkIn=2026-10-12&amp;checkOut=2026-10-16&amp;guests=4&amp;bbox=-4.31,54.72,-3.67,55.10&amp;zoom=10&amp;view=map</pre>
+            <p>The factory validates the date range and clamps guests and zoom before calling the service. Invalid state is rejected before any SuperControl request is made.</p>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Build one normalized catalogue</h2>
+            <p>The content, configuration, prices and availability indexes are loaded in parallel. Their <code>lastUpdated</code> values are combined into a catalogue fingerprint.</p>
+            <p>The service hydrates active properties once, limits concurrent payload reads, and stores the normalized catalogue in memory. Individual payloads also use the existing disk-backed delta cache, so a process restart does not require every unchanged payload to be downloaded again.</p>
+            <pre class="sc-pre">var catalog = await GetCatalogAsync(
+    account.AccountId,
+    content,
+    configurationIndex,
+    pricesIndex,
+    availabilityIndex,
+    cancellationToken);</pre>
+            <p>When an index timestamp changes, the fingerprint changes and a fresh catalogue is built. This keeps stable content local while allowing prices and availability to be refreshed from their own indexes.</p>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Filter before limiting results</h2>
+            <p>Do not take the first page of active properties and then search it. A matching property may sit beyond that initial slice.</p>
+            <p>The explorer applies location, capacity, bounds and availability filters to the complete normalized catalogue. Sorting and the result limit come last:</p>
+            <pre class="sc-pre">var cards = catalog.Properties
+    .Where(property =&gt; MatchesQuery(query, property.Listing, BuildLocation(property.Listing)))
+    .Select(property =&gt; BuildSearchCard(property, inferredCoordinates, checkIn, checkOut))
+    .Where(card =&gt; !card.MaximumGuests.HasValue || card.MaximumGuests &gt;= guests)
+    .Where(card =&gt; bounds is null || bounds.Contains(card.Latitude!.Value, card.Longitude!.Value))
+    .Where(card =&gt; !hasSelectedDates || card.IsAvailableForSelectedDates)
+    .OrderBy(card =&gt; card.SelectedStayPrice ?? card.FromPrice ?? decimal.MaxValue)
+    .Take(maxResults)
+    .ToList();</pre>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Availability and price freshness</h2>
+            <p>Property copy, images and facilities can normally be cached until the content index says they changed. Availability and prices are commercial data and should follow their own index timestamps.</p>
+            <p>When dates are supplied, the explorer only returns a property when:</p>
+            <ol>
+                <li>availability data exists;</li>
+                <li>the full stay is inside the availability coverage window;</li>
+                <li>every requested night is marked available;</li>
+                <li>the requested stay meets the arrival date's minimum-stay rule.</li>
+            </ol>
+            <p>An unknown or stale-looking availability result is not presented as bookable. The booking flow should still perform a final live validation before confirming a reservation.</p>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Handle missing coordinates conservatively</h2>
+            <p>Some SuperControl listings have a useful location such as <code>Castle Douglas, GB</code> but no latitude or longitude. The explorer can infer an approximate point from other properties only when confidence is high.</p>
+            <p>The current rule requires:</p>
+            <ul>
+                <li>a non-empty city and country;</li>
+                <li>at least two mapped properties with the same normalized location;</li>
+                <li>all contributing points to be within 30 km of the centroid.</li>
+            </ul>
+            <p>Inferred points are labelled “Approximate map location”. Properties that still cannot be mapped remain valid list results until the user explicitly searches within map bounds.</p>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Add Leaflet and OpenStreetMap</h2>
+            <p>The demo pins Leaflet and the marker-cluster plugin, then creates a map with OpenStreetMap attribution:</p>
+            <pre class="sc-pre">const map = L.map(mapElement, {
+  zoomControl: true,
+  scrollWheelZoom: false
+});
+
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: '&amp;copy; &lt;a href="https://www.openstreetmap.org/copyright"&gt;OpenStreetMap&lt;/a&gt; contributors'
+}).addTo(map);</pre>
+            <p>Keep attribution visible. For a production site with meaningful traffic, use an appropriate hosted OSM-derived provider or self-hosted tiles rather than treating the community tile server as a free production CDN.</p>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Keep the list and map in sync</h2>
+            <p>Each card and marker shares the numeric property ID. Two maps—one for cards and one for markers—make selection and viewport filtering direct.</p>
+            <p>After <code>moveend</code>, the browser checks each marker against <code>map.getBounds()</code>, hides cards outside the viewport and updates the visible result count. Moving the map does not immediately call the server. Instead, it reveals a “Search this area” button.</p>
+            <p>This is preferable to issuing a request on every pan or zoom:</p>
+            <ul>
+                <li>the map remains responsive;</li>
+                <li>accidental movements do not create API traffic;</li>
+                <li>the user controls when the location becomes part of the stable URL.</li>
+            </ul>
+            <p>If automatic search is required later, debounce <code>moveend</code> by roughly 300–500 ms and cancel superseded requests.</p>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Cluster dense portfolios</h2>
+            <pre class="sc-pre">const clusters = L.markerClusterGroup({
+  disableClusteringAtZoom: 14,
+  spiderfyOnMaxZoom: true,
+  showCoverageOnHover: false,
+  maxClusterRadius: 52
+});</pre>
+            <p>Clustering keeps coastal portfolios readable at regional zoom levels. At close zoom, overlapping markers spiderfy so each property remains selectable. Price markers use DOM text nodes rather than interpolated HTML, which prevents upstream currency or price text from being interpreted as markup.</p>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Suggestions and reset</h2>
+            <p>Autocomplete suggestions are built from the complete catalogue, not the current result page. This means a narrow search does not progressively remove valid locations and property names from the suggestion list.</p>
+            <p>Selecting or typing a location clears stale map bounds. “Reset search” returns to the route without query parameters, restoring the default dates, guest count, map bounds and mobile view.</p>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Mobile behaviour</h2>
+            <p>Desktop shows the list and map side by side. On smaller screens, List and Map buttons switch between full-width panels. The selected view is written to the <code>view</code> query parameter with <code>history.replaceState</code>, so the preference survives sharing without forcing a page reload.</p>
+            <p>When the map panel becomes visible, call <code>map.invalidateSize()</code>. Leaflet cannot calculate its layout reliably while its container is hidden.</p>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Booking hand-off</h2>
+            <p>The explorer is a discovery surface, not the source of truth for a booking. Preserve the property ID, dates and guest count when linking to the property page or SuperControl booking flow.</p>
+            <ol>
+                <li>Display cached search data for speed.</li>
+                <li>Carry the selected search context into the property page.</li>
+                <li>Refresh price and availability before the customer commits.</li>
+                <li>Hand off to SuperControl using the configured property and booking identifiers.</li>
+            </ol>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Security and operational notes</h2>
+            <ul>
+                <li>Keep the SuperControl API token on the server; never expose it to map JavaScript.</li>
+                <li>Only follow payload URLs from the configured SuperControl HTTPS origin.</li>
+                <li>Keep the explorer no-indexed while it is a demonstration.</li>
+                <li>Sanitize listing HTML and render marker labels with <code>textContent</code>.</li>
+                <li>Use shared durable cache storage when running more than one application instance.</li>
+                <li>Monitor tile usage, SuperControl request volume, stale fallbacks and catalogue build time.</li>
+            </ul>
+        </section>
+
+        <section class="sv-doc">
+            <h2>Run and verify</h2>
+            <pre class="sc-pre">dotnet build supercontrol-listing-site-demo-public.sln
+dotnet test supercontrol-listing-site-demo-public.sln</pre>
+            <p>Then verify:</p>
+            <ol>
+                <li>moving the map immediately filters the visible list;</li>
+                <li>“Search this area” updates <code>bbox</code> and <code>zoom</code> in the URL;</li>
+                <li>date searches exclude unavailable and unknown properties;</li>
+                <li>guest capacity is applied before the result limit;</li>
+                <li>clusters expand and overlapping markers remain selectable;</li>
+                <li>suggestions remain complete after a narrow search;</li>
+                <li>reset clears the complete search state;</li>
+                <li>the mobile view switch correctly resizes the map.</li>
+            </ol>
+        </section>
+
+        <section class="sv-doc">
+            <p><a class="text-link" href="/supercontrol-property-explorer">Open the map property explorer</a></p>
+            <p><a class="text-link" href="/supercontrol-listing-site-tutorial">Read the underlying listing API tutorial</a></p>
+        </section>
+    </div>
+</section>

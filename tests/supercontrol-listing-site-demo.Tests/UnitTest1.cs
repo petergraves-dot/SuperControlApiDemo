@@ -498,7 +498,9 @@ internal sealed class RecordingListingSiteService : ISuperControlListingSiteServ
         int guests,
         DateOnly? checkIn,
         DateOnly? checkOut,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        PropertyMapBounds? bounds = null,
+        int maxResults = 12)
     {
         LastAccountId = accountId;
         LastGuests = guests;

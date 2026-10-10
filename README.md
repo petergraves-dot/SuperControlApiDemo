@@ -6,6 +6,8 @@ Standalone ASP.NET Core project focused on SuperControl integration demo files.
 
 - `/supercontrol-demo` - API diagnostics and payload inspector
 - `/supercontrol-listing-site-demo` - listing site style search/cards demo
+- `/supercontrol-property-explorer` - synchronized list-and-map property search demo
+- `/supercontrol-property-explorer-tutorial` - map property explorer implementation tutorial
 - `/supercontrol-listing-site-demo/property/{propertyId}` - property detail page
 - `/supercontrol-listing-site-tutorial` - implementation tutorial page
 - `/supercontrol-data-export` - Data Export bookings XML demo
