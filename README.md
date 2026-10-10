@@ -53,6 +53,23 @@ SuperControl__ApiKey=your-supercontrol-sc-token
 
 `appsettings.Local.json` is optional, overrides the checked-in settings, is excluded from publishing, and is intentionally git-ignored. Environment variables and command-line settings take precedence over it.
 
+## Testing
+
+Run the full test suite with:
+
+```bash
+dotnet test supercontrol-listing-site-demo-public.sln
+```
+
+The property explorer browser tests use Playwright with deterministic property data, so they do not call the live SuperControl API. Before the first browser-test run on a machine, build the UI test project and install Chromium:
+
+```bash
+dotnet build tests/supercontrol-listing-site-demo.UiTests/supercontrol-listing-site-demo.UiTests.csproj
+pwsh tests/supercontrol-listing-site-demo.UiTests/bin/Debug/net10.0/playwright.ps1 install chromium
+```
+
+The UI tests cover synchronized map/list results, search within map bounds, marker clustering and selection, location suggestions, stable filter URLs, reset, and mobile map/list switching. OpenStreetMap tile requests are replaced with a local transparent image during tests.
+
 ## Notes
 
 - `.supercontrol-cache/` is local runtime cache and is intentionally git-ignored.
