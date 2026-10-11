@@ -20,6 +20,17 @@ if (args.Length > 0)
     builder.Configuration.AddCommandLine(args);
 }
 
+var canonicalBaseUrlValue = builder.Configuration["Site:CanonicalBaseUrl"]?.TrimEnd('/');
+if (!Uri.TryCreate(canonicalBaseUrlValue, UriKind.Absolute, out var canonicalBaseUri)
+    || canonicalBaseUri.Scheme != Uri.UriSchemeHttps
+    || canonicalBaseUri.AbsolutePath != "/"
+    || !string.IsNullOrEmpty(canonicalBaseUri.Query))
+{
+    throw new InvalidOperationException(
+        "Site:CanonicalBaseUrl must be an absolute HTTPS origin without a path or query string.");
+}
+var canonicalBaseUrl = canonicalBaseUri.GetLeftPart(UriPartial.Authority);
+
 // Add services to the container.
 builder.Services.AddControllersWithViews(options =>
 {
@@ -28,6 +39,10 @@ builder.Services.AddControllersWithViews(options =>
 builder.Services.AddAntiforgery(options =>
 {
     options.HeaderName = "RequestVerificationToken";
+});
+builder.Services.AddHttpsRedirection(options =>
+{
+    options.RedirectStatusCode = StatusCodes.Status308PermanentRedirect;
 });
 builder.Services
     .AddOptions<SuperControlOptions>()
@@ -128,7 +143,8 @@ app.Use(async (context, next) =>
 {
     if (ShouldNoIndex(context.Request.Path))
     {
-        context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
+        context.Items["SeoNoIndex"] = true;
+        context.Response.Headers["X-Robots-Tag"] = "noindex";
     }
 
     await next();
@@ -136,20 +152,14 @@ app.Use(async (context, next) =>
 
 app.UseAuthorization();
 
-app.MapGet("/sitemap.xml", (HttpRequest request) =>
+app.MapGet("/sitemap.xml", () =>
 {
-    var scheme = request.Scheme;
-    var host = request.Host.Value;
-    var now = DateTime.UtcNow.ToString("yyyy-MM-dd");
-
-    var urls = new[]
+    string[] paths =
     {
-        (Path: "/", ChangeFreq: "weekly", Priority: "1.0"),
-        (Path: "/supercontrol-demo", ChangeFreq: "daily", Priority: "0.9"),
-        (Path: "/supercontrol-listing-site-tutorial", ChangeFreq: "weekly", Priority: "0.7"),
-        (Path: "/supercontrol-property-explorer-tutorial", ChangeFreq: "weekly", Priority: "0.7"),
-        (Path: "/supercontrol-data-export", ChangeFreq: "weekly", Priority: "0.7"),
-        (Path: "/supercontrol-data-export-tutorial", ChangeFreq: "weekly", Priority: "0.6")
+        "/",
+        "/supercontrol-listing-site-tutorial",
+        "/supercontrol-property-explorer-tutorial",
+        "/supercontrol-data-export-tutorial"
     };
 
     var xml = new StringBuilder();
@@ -157,14 +167,11 @@ app.MapGet("/sitemap.xml", (HttpRequest request) =>
     xml.Append(
         """<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">""");
 
-    foreach (var url in urls)
+    foreach (var path in paths)
     {
-        var absoluteUrl = $"{scheme}://{host}{url.Path}";
+        var absoluteUrl = $"{canonicalBaseUrl}{path}";
         xml.Append("<url>");
         xml.Append($"<loc>{absoluteUrl}</loc>");
-        xml.Append($"<lastmod>{now}</lastmod>");
-        xml.Append($"<changefreq>{url.ChangeFreq}</changefreq>");
-        xml.Append($"<priority>{url.Priority}</priority>");
         xml.Append("</url>");
     }
 
@@ -172,10 +179,9 @@ app.MapGet("/sitemap.xml", (HttpRequest request) =>
     return Results.Content(xml.ToString(), "application/xml", Encoding.UTF8);
 });
 
-app.MapGet("/robots.txt", (HttpRequest request) =>
+app.MapGet("/robots.txt", () =>
 {
-    var sitemapUrl = $"{request.Scheme}://{request.Host.Value}/sitemap.xml";
-    var robots = $"User-agent: *\nDisallow: /supercontrol-listing-site-demo\nDisallow: /supercontrol-listing-site-demo/property/\nAllow: /\nSitemap: {sitemapUrl}\n";
+    var robots = $"User-agent: *\nAllow: /\nSitemap: {canonicalBaseUrl}/sitemap.xml\n";
     return Results.Text(robots, "text/plain", Encoding.UTF8);
 });
 
@@ -196,14 +202,13 @@ app.Run();
 
 static bool ShouldNoIndex(PathString path)
 {
-    if (!path.HasValue)
-    {
-        return false;
-    }
-
-    return path.Value!.StartsWith("/supercontrol-listing-site-demo", StringComparison.OrdinalIgnoreCase)
-        || path.Value.StartsWith("/supercontrol-property-explorer", StringComparison.OrdinalIgnoreCase)
-        || path.Value.StartsWith("/supercontrol-data-export", StringComparison.OrdinalIgnoreCase);
+    return path.StartsWithSegments("/supercontrol-demo", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWithSegments("/supercontrol-listing-site-demo", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWithSegments("/supercontrol-property-explorer", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWithSegments("/supercontrol-data-export", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWithSegments("/supercontrol-listing-site-tests", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWithSegments("/supercontrol-data-export-tests", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWithSegments("/Error", StringComparison.OrdinalIgnoreCase);
 }
 
 public partial class Program
