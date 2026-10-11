@@ -156,10 +156,7 @@ app.MapGet("/sitemap.xml", () =>
 {
     string[] paths =
     {
-        "/",
-        "/supercontrol-listing-site-tutorial",
-        "/supercontrol-property-explorer-tutorial",
-        "/supercontrol-data-export-tutorial"
+        "/"
     };
 
     var xml = new StringBuilder();
