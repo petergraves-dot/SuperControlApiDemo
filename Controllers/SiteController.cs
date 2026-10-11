@@ -6,6 +6,14 @@ namespace petergraves.Controllers;
 
 public sealed class SiteController : Controller
 {
+    private const string FieldNotesBaseUrl = "https://petergraves.co.uk/field-notes";
+    private readonly IWebHostEnvironment _environment;
+
+    public SiteController(IWebHostEnvironment environment)
+    {
+        _environment = environment;
+    }
+
     [HttpGet("/")]
     public IActionResult Index()
     {
@@ -15,13 +23,17 @@ public sealed class SiteController : Controller
     [HttpGet("/supercontrol-listing-site-tutorial")]
     public IActionResult SuperControlListingSiteTutorial()
     {
-        return View("~/Views/SuperControlListingSiteTutorial/Index.cshtml");
+        return TutorialOrRedirect(
+            "~/Views/SuperControlListingSiteTutorial/Index.cshtml",
+            $"{FieldNotesBaseUrl}/supercontrol-listing-site-demo");
     }
 
     [HttpGet("/supercontrol-property-explorer-tutorial")]
     public IActionResult SuperControlPropertyExplorerTutorial()
     {
-        return View("~/Views/PropertyExplorerTutorial/Index.cshtml");
+        return TutorialOrRedirect(
+            "~/Views/PropertyExplorerTutorial/Index.cshtml",
+            $"{FieldNotesBaseUrl}/map-based-property-explorer-with-supercontrol-and-leaflet");
     }
 
     [HttpGet("/supercontrol-listing-site-tests")]
@@ -33,7 +45,9 @@ public sealed class SiteController : Controller
     [HttpGet("/supercontrol-data-export-tutorial")]
     public IActionResult SuperControlDataExportTutorial()
     {
-        return View("~/Views/SuperControlDataExportTutorial/Index.cshtml");
+        return TutorialOrRedirect(
+            "~/Views/SuperControlDataExportTutorial/Index.cshtml",
+            $"{FieldNotesBaseUrl}/supercontrol-data-export-api");
     }
 
     [HttpGet("/supercontrol-data-export-tests")]
@@ -50,5 +64,12 @@ public sealed class SiteController : Controller
         {
             RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier
         });
+    }
+
+    private IActionResult TutorialOrRedirect(string developmentViewPath, string productionUrl)
+    {
+        return _environment.IsDevelopment()
+            ? View(developmentViewPath)
+            : RedirectPermanentPreserveMethod(productionUrl);
     }
 }

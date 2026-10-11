@@ -25,7 +25,7 @@ public sealed class SeoTests
     }
 
     [TestMethod]
-    public async Task Sitemap_ContainsOnlyIndexableUrlsAndNoSyntheticMetadata()
+    public async Task Sitemap_ContainsOnlyTheDemoHomepageAndNoSyntheticMetadata()
     {
         using var factory = CreateFactory();
         using var client = factory.CreateClient();
@@ -33,15 +33,15 @@ public sealed class SeoTests
         var sitemap = await client.GetStringAsync("/sitemap.xml");
 
         StringAssert.Contains(sitemap, $"<loc>{CanonicalBaseUrl}/</loc>");
-        StringAssert.Contains(sitemap, $"<loc>{CanonicalBaseUrl}/supercontrol-listing-site-tutorial</loc>");
-        StringAssert.Contains(sitemap, $"<loc>{CanonicalBaseUrl}/supercontrol-property-explorer-tutorial</loc>");
-        StringAssert.Contains(sitemap, $"<loc>{CanonicalBaseUrl}/supercontrol-data-export-tutorial</loc>");
         Assert.IsFalse(sitemap.Contains("<lastmod>", StringComparison.Ordinal));
         Assert.IsFalse(sitemap.Contains("<changefreq>", StringComparison.Ordinal));
         Assert.IsFalse(sitemap.Contains("<priority>", StringComparison.Ordinal));
         Assert.IsFalse(sitemap.Contains("/supercontrol-demo</loc>", StringComparison.Ordinal));
         Assert.IsFalse(sitemap.Contains("/supercontrol-listing-site-demo</loc>", StringComparison.Ordinal));
+        Assert.IsFalse(sitemap.Contains("/supercontrol-listing-site-tutorial</loc>", StringComparison.Ordinal));
+        Assert.IsFalse(sitemap.Contains("/supercontrol-property-explorer-tutorial</loc>", StringComparison.Ordinal));
         Assert.IsFalse(sitemap.Contains("/supercontrol-data-export</loc>", StringComparison.Ordinal));
+        Assert.IsFalse(sitemap.Contains("/supercontrol-data-export-tutorial</loc>", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -99,12 +99,39 @@ public sealed class SeoTests
         Assert.IsFalse(html.Contains("<meta name=\"robots\"", StringComparison.Ordinal));
     }
 
-    private static WebApplicationFactory<Program> CreateFactory()
+    [TestMethod]
+    [DataRow(
+        "/supercontrol-listing-site-tutorial",
+        "https://petergraves.co.uk/field-notes/supercontrol-listing-site-demo")]
+    [DataRow(
+        "/supercontrol-property-explorer-tutorial",
+        "https://petergraves.co.uk/field-notes/map-based-property-explorer-with-supercontrol-and-leaflet")]
+    [DataRow(
+        "/supercontrol-data-export-tutorial",
+        "https://petergraves.co.uk/field-notes/supercontrol-data-export-api")]
+    public async Task TutorialPages_PermanentlyRedirectToFieldNotesOutsideDevelopment(
+        string path,
+        string expectedLocation)
+    {
+        using var factory = CreateFactory("Production");
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        using var response = await client.GetAsync(path);
+
+        Assert.AreEqual(HttpStatusCode.PermanentRedirect, response.StatusCode);
+        Assert.AreEqual(expectedLocation, response.Headers.Location?.AbsoluteUri);
+    }
+
+    private static WebApplicationFactory<Program> CreateFactory(string environment = "Development")
     {
         return new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
-                builder.UseEnvironment("Development");
+                builder.UseEnvironment(environment);
                 builder.ConfigureAppConfiguration((_, configurationBuilder) =>
                 {
                     configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
