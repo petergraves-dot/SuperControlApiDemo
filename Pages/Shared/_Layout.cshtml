@@ -2,15 +2,27 @@
 <html lang="en">
 <head>
     @{
-        var shouldNoIndex = Context.Request.Path.Value?.StartsWith("/supercontrol-listing-site-demo", StringComparison.OrdinalIgnoreCase) == true
-            || Context.Request.Path.Value?.StartsWith("/supercontrol-property-explorer", StringComparison.OrdinalIgnoreCase) == true;
+        var shouldNoIndex = Context.Items["SeoNoIndex"] as bool? == true;
+        var description = ViewData["Description"] as string;
+        var canonicalPath = ViewData["CanonicalPath"] as string;
+        var canonicalBaseUrl = Context.RequestServices
+            .GetRequiredService<IConfiguration>()["Site:CanonicalBaseUrl"]!
+            .TrimEnd('/');
     }
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"]</title>
+    @if (!string.IsNullOrWhiteSpace(description))
+    {
+        <meta name="description" content="@description" />
+    }
     @if (shouldNoIndex)
     {
-        <meta name="robots" content="noindex, nofollow" />
+        <meta name="robots" content="noindex" />
+    }
+    else if (!string.IsNullOrWhiteSpace(canonicalPath))
+    {
+        <link rel="canonical" href="@(canonicalBaseUrl + canonicalPath)" />
     }
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     @await RenderSectionAsync("Styles", required: false)
