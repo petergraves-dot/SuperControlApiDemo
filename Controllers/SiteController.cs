@@ -56,6 +56,9 @@ public sealed class SiteController : Controller
         return View("~/Views/SuperControlDataExportTests/Index.cshtml");
     }
 
+    [HttpGet("/cookies")]
+    public IActionResult Cookies() => View(CookiePolicy.Current);
+
     [HttpGet("/Error")]
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     public IActionResult Error()

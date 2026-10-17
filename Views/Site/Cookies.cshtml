@@ -1,0 +1,87 @@
+@model CookiePolicy
+@{
+    ViewData["Title"] = "Cookie policy | Peter Graves demos";
+    ViewData["Description"] = "How demo.petergraves.co.uk uses cookies and browser storage, and how to change your analytics preferences.";
+    ViewData["CanonicalPath"] = "/cookies";
+}
+
+<div class="cookie-policy-shell">
+    <a class="policy-skip-link" href="#cookie-policy">Skip to the cookie policy</a>
+    <header class="policy-header">
+        <a class="policy-home-link" href="/" aria-label="Peter Graves demos, home">Peter Graves demos</a>
+        <a class="policy-back-link" href="/">← Home</a>
+    </header>
+    <div class="policy-page" id="cookie-policy">
+        <header class="policy-hero">
+            <p class="policy-eyebrow">Site information</p>
+            <h1>Cookie policy</h1>
+            <p>Last updated <time datetime="@Model.Updated.ToString("yyyy-MM-dd")">@Model.Updated.ToString("d MMMM yyyy")</time></p>
+        </header>
+        <article class="policy-body">
+            <p>I am Peter Graves. This policy explains how <a href="@Model.Scope">demo.petergraves.co.uk</a> uses cookies and browser storage. It covers this demo website. The main website at petergraves.co.uk and other linked websites have separate policies and consent choices.</p>
+
+            <section aria-labelledby="storage-title">
+                <h2 id="storage-title">Cookies and browser storage</h2>
+                <p>A cookie is a small text file stored by your browser. The browser sends it with requests to the domain it belongs to. Local storage keeps information in your browser between visits. It is read by scripts on the website and is not automatically sent with each request.</p>
+                <p>This site uses local storage to remember your cookie choice. Its demo forms use an antiforgery cookie for security. If you accept analytics, Google Analytics sets first-party cookies restricted to this demo host to measure visits.</p>
+            </section>
+
+            <section aria-labelledby="choices-title">
+                <h2 id="choices-title">Your choices</h2>
+                <p>Google Analytics stays off until you select "Accept analytics" in the consent banner or enable it in cookie preferences. You can reject analytics and still read the site and use the demo controls.</p>
+                <environment exclude="Development">
+                    <p><button type="button" class="policy-preferences" data-cookie-preferences>Change cookie preferences</button></p>
+                </environment>
+                <environment include="Development">
+                    <p>Analytics and the consent banner are disabled in this development environment.</p>
+                </environment>
+                <p>You can also reopen preferences using the cookie button in the bottom-left corner. Withdrawing analytics consent removes this site's Google Analytics cookies and reloads the page to stop the loaded analytics script. It does not delete information already sent to Google.</p>
+                <p>Cookie choices apply to this browser. Clearing site data removes the saved choice, so the banner will appear again. Your browser's privacy settings let you inspect, block or delete cookies and local storage.</p>
+            </section>
+
+            <section aria-labelledby="inventory-title">
+                <h2 id="inventory-title">What this site stores</h2>
+                <p>The inventory below describes storage set by this demo site. Demo analytics cookie names start with demo_ga and are separate from the main website's _ga cookies. Items appear when the relevant feature runs. Local storage entries have no automatic expiry in the site's code.</p>
+                @foreach (var category in Model.Items.GroupBy(item => item.Category))
+                {
+                    <h3>@category.Key</h3>
+                    <div class="policy-table-scroll" tabindex="0" role="region" aria-label="@category.Key storage inventory">
+                        <table class="policy-table">
+                            <caption>@category.Key cookies and browser storage</caption>
+                            <thead><tr><th scope="col">Name and type</th><th scope="col">Purpose</th><th scope="col">Provider and duration</th></tr></thead>
+                            <tbody>
+                                @foreach (var item in category)
+                                {
+                                    <tr>
+                                        <th scope="row"><code>@item.Name</code><br /><span class="policy-storage-type">@(item.Storage == "cookie" ? "Cookie" : "Local storage")</span></th>
+                                        <td>@item.Purpose</td>
+                                        <td>@item.Provider<br />@item.Duration</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </section>
+
+            <section aria-labelledby="embedded-services-title">
+                <h2 id="embedded-services-title">Embedded demo services</h2>
+                <p>The property explorer loads map libraries from jsDelivr and map tiles from OpenStreetMap. Property detail pages can load availability and booking components from SuperControl. Your browser contacts those providers when their content loads. Embedded booking tools run on SuperControl's domain and can use their own storage when you interact with them.</p>
+                <p>This site's analytics choice controls the Google Analytics tag added by this demo. It does not change preferences on another provider's website or inside its booking tools.</p>
+            </section>
+
+            <section aria-labelledby="analytics-title">
+                <h2 id="analytics-title">Google Analytics</h2>
+                <p>Google Analytics measures page visits and how visitors use the site. If you accept analytics, your browser contacts Google and sends visit information, such as the page address and browser details. The analytics configuration strips query strings and fragments from page and referrer addresses. Google processes this information under its <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">privacy policy</a>.</p>
+                <p>The site keeps Google's advertising consent settings denied and disables Google signals and advertising personalisation in its analytics configuration. The analytics cookies have a default lifetime of up to two years. Browsers may shorten that lifetime. See <a href="https://support.google.com/analytics/answer/11397207" target="_blank" rel="noopener noreferrer">Google's cookie documentation</a>.</p>
+            </section>
+
+            <section aria-labelledby="updates-title">
+                <h2 id="updates-title">Policy updates and contact</h2>
+                <p>I update this policy when the site's use of cookies or browser storage changes. The date above records the most recent policy update.</p>
+                <p>For questions about this policy, <a href="https://www.linkedin.com/in/peter-graves-571814340/" target="_blank" rel="noopener noreferrer">contact me on LinkedIn</a>.</p>
+            </section>
+        </article>
+    </div>
+    <footer class="policy-footer"><a href="/">Home</a> · <a href="https://petergraves.co.uk/field-notes">Field notes</a></footer>
+</div>

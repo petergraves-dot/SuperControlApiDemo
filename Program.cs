@@ -83,7 +83,7 @@ builder.Services.AddScoped<IPropertyExplorerViewModelFactory, PropertyExplorerVi
 var app = builder.Build();
 var cookieAudit = new List<object>();
 const int cookieAuditLimit = 200;
-const string contentSecurityPolicy = "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' https://secure.supercontrol.co.uk https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' https: data:; font-src 'self'; connect-src 'self' https://api.supercontrol.co.uk https://secure.supercontrol.co.uk https://tile.openstreetmap.org; frame-src 'self' https://secure.supercontrol.co.uk";
+const string contentSecurityPolicy = "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' https://www.googletagmanager.com https://secure.supercontrol.co.uk https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' https: data:; font-src 'self'; connect-src 'self' https://www.googletagmanager.com https://*.google-analytics.com https://api.supercontrol.co.uk https://secure.supercontrol.co.uk https://tile.openstreetmap.org; frame-src 'self' https://secure.supercontrol.co.uk";
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
@@ -156,7 +156,13 @@ app.MapGet("/sitemap.xml", () =>
 {
     string[] paths =
     {
-        "/"
+        "/",
+        "/supercontrol-demo",
+        "/supercontrol-listing-site-demo",
+        "/supercontrol-property-explorer",
+        "/supercontrol-data-export",
+        "/supercontrol-data-export/properties",
+        "/cookies"
     };
 
     var xml = new StringBuilder();
@@ -199,10 +205,8 @@ app.Run();
 
 static bool ShouldNoIndex(PathString path)
 {
-    return path.StartsWithSegments("/supercontrol-demo", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWithSegments("/supercontrol-listing-site-demo", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWithSegments("/supercontrol-property-explorer", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWithSegments("/supercontrol-data-export", StringComparison.OrdinalIgnoreCase)
+    return path.StartsWithSegments("/supercontrol-listing-site-demo/property", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWithSegments("/supercontrol-property-explorer/search", StringComparison.OrdinalIgnoreCase)
         || path.StartsWithSegments("/supercontrol-listing-site-tests", StringComparison.OrdinalIgnoreCase)
         || path.StartsWithSegments("/supercontrol-data-export-tests", StringComparison.OrdinalIgnoreCase)
         || path.StartsWithSegments("/Error", StringComparison.OrdinalIgnoreCase);

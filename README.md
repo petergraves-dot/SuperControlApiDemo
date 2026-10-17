@@ -87,3 +87,12 @@ The script loads credentials from the first available source: `DEPLOY_ENV_FILE`,
 files and `appsettings.Local.json` are excluded from Git; `.env.example`
 contains only safe placeholders. The script also refuses to use a tracked
 environment or deployment-settings file.
+
+
+## Cookies and analytics
+
+The Silktide consent banner and Google Analytics run outside Development.
+`dotnet watch` uses the Development launch profile and does not load them.
+The `/cookies` page reads the reviewed inventory in `Data/cookie-policy.json`.
+See [.docs/COOKIE-AUDIT.md](.docs/COOKIE-AUDIT.md) for the production Playwright
+scan, its limitations and the review workflow.

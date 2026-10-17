@@ -25,7 +25,7 @@ public sealed class SeoTests
     }
 
     [TestMethod]
-    public async Task Sitemap_ContainsOnlyTheDemoHomepageAndNoSyntheticMetadata()
+    public async Task Sitemap_ContainsThePublicDemoPagesAndNoSyntheticMetadata()
     {
         using var factory = CreateFactory();
         using var client = factory.CreateClient();
@@ -33,24 +33,22 @@ public sealed class SeoTests
         var sitemap = await client.GetStringAsync("/sitemap.xml");
 
         StringAssert.Contains(sitemap, $"<loc>{CanonicalBaseUrl}/</loc>");
+        StringAssert.Contains(sitemap, $"<loc>{CanonicalBaseUrl}/supercontrol-demo</loc>");
+        StringAssert.Contains(sitemap, $"<loc>{CanonicalBaseUrl}/supercontrol-listing-site-demo</loc>");
+        StringAssert.Contains(sitemap, $"<loc>{CanonicalBaseUrl}/supercontrol-property-explorer</loc>");
+        StringAssert.Contains(sitemap, $"<loc>{CanonicalBaseUrl}/supercontrol-data-export</loc>");
+        StringAssert.Contains(sitemap, $"<loc>{CanonicalBaseUrl}/supercontrol-data-export/properties</loc>");
         Assert.IsFalse(sitemap.Contains("<lastmod>", StringComparison.Ordinal));
         Assert.IsFalse(sitemap.Contains("<changefreq>", StringComparison.Ordinal));
         Assert.IsFalse(sitemap.Contains("<priority>", StringComparison.Ordinal));
-        Assert.IsFalse(sitemap.Contains("/supercontrol-demo</loc>", StringComparison.Ordinal));
-        Assert.IsFalse(sitemap.Contains("/supercontrol-listing-site-demo</loc>", StringComparison.Ordinal));
         Assert.IsFalse(sitemap.Contains("/supercontrol-listing-site-tutorial</loc>", StringComparison.Ordinal));
         Assert.IsFalse(sitemap.Contains("/supercontrol-property-explorer-tutorial</loc>", StringComparison.Ordinal));
-        Assert.IsFalse(sitemap.Contains("/supercontrol-data-export</loc>", StringComparison.Ordinal));
         Assert.IsFalse(sitemap.Contains("/supercontrol-data-export-tutorial</loc>", StringComparison.Ordinal));
     }
 
     [TestMethod]
-    [DataRow("/supercontrol-demo")]
-    [DataRow("/supercontrol-listing-site-demo")]
     [DataRow("/supercontrol-listing-site-demo/property/123")]
-    [DataRow("/supercontrol-property-explorer")]
-    [DataRow("/supercontrol-data-export")]
-    [DataRow("/supercontrol-data-export/properties")]
+    [DataRow("/supercontrol-property-explorer/search")]
     [DataRow("/supercontrol-listing-site-tests")]
     [DataRow("/supercontrol-data-export-tests")]
     public async Task InteractiveAndTestPages_SendNoIndexHeader(string path)
@@ -79,6 +77,11 @@ public sealed class SeoTests
 
     [TestMethod]
     [DataRow("/", "/")]
+    [DataRow("/supercontrol-demo", "/supercontrol-demo")]
+    [DataRow("/supercontrol-listing-site-demo", "/supercontrol-listing-site-demo")]
+    [DataRow("/supercontrol-property-explorer", "/supercontrol-property-explorer")]
+    [DataRow("/supercontrol-data-export", "/supercontrol-data-export")]
+    [DataRow("/supercontrol-data-export/properties", "/supercontrol-data-export/properties")]
     [DataRow("/supercontrol-listing-site-tutorial", "/supercontrol-listing-site-tutorial")]
     [DataRow("/supercontrol-property-explorer-tutorial", "/supercontrol-property-explorer-tutorial")]
     [DataRow("/supercontrol-data-export-tutorial", "/supercontrol-data-export-tutorial")]

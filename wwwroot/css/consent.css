@@ -1,0 +1,33 @@
+#stcm-wrapper {
+  --fontFamily: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --primaryColor: #0f62d6;
+  --backgroundColor: #ffffff;
+  --textColor: #1a2433;
+  --iconColor: #ffffff;
+  --iconBackgroundColor: #0f62d6;
+}
+
+#stcm-wrapper #stcm-banner .stcm-button { width: 100%; }
+.site-policy-links { padding: 1rem 1.5rem 2rem; text-align: center; font-size: 0.9rem; }
+.site-policy-links a, .cookie-policy-shell a { color: #0f62d6; }
+.cookie-policy-shell { width: min(100% - 2rem, 68rem); margin: 0 auto; padding: 1.5rem 0 2rem; line-height: 1.65; }
+.policy-header, .policy-footer { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.policy-header { padding-bottom: 1rem; border-bottom: 1px solid #b4ccf2; }
+.policy-hero { margin: 2rem 0; }
+.policy-hero h1 { font-size: clamp(2rem, 6vw, 3rem); margin: 0.5rem 0; }
+.policy-eyebrow { color: #4f6078; }
+.policy-body { padding: clamp(1rem, 3vw, 2rem); background: #fff; border: 1px solid #c4d7f5; border-radius: 1rem; }
+.policy-body section { margin-top: 2rem; }
+.policy-body h2 { font-size: 1.4rem; line-height: 1.3; }
+.policy-body h3 { margin-top: 2rem; font-size: 1.1rem; }
+.policy-footer { margin-top: 2rem; }
+.policy-preferences { padding: 0.7rem 1rem; border: 1px solid #0f62d6; background: #0f62d6; color: #fff; font: inherit; cursor: pointer; border-radius: 0.4rem; }
+.policy-preferences:focus-visible { outline: 2px solid #1a2433; outline-offset: 3px; }
+.policy-table-scroll { overflow-x: auto; }
+.policy-table { width: 100%; min-width: 38rem; border-collapse: collapse; font-size: 0.875rem; }
+.policy-table caption { text-align: left; padding-bottom: 0.75rem; }
+.policy-table th, .policy-table td { text-align: left; vertical-align: top; padding: 0.8rem; border: 1px solid #c4d7f5; }
+.policy-table th[scope="row"] { width: 25%; overflow-wrap: anywhere; }
+.policy-storage-type { font-weight: normal; }
+.policy-skip-link { position: fixed; top: 0.75rem; left: 0.75rem; z-index: 100000; padding: 0.5rem; background: white; transform: translateY(-200%); }
+.policy-skip-link:focus { transform: translateY(0); }
