@@ -2,6 +2,8 @@
 @model petergraves.ViewModels.PropertyExplorer.PropertyExplorerResponseViewModel
 @{
     ViewData["Title"] = "SuperControl Map Property Explorer";
+    ViewData["Description"] = "Search SuperControl properties in a synchronised list and interactive map.";
+    ViewData["CanonicalPath"] = "/supercontrol-property-explorer";
     var markerData = Model.Properties
         .Where(property => property.HasValidCoordinates)
         .Select(property => new
